@@ -91,7 +91,7 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 그 외 현재 확인한 컬럼에서는 결측치가 발견되지 않았습니다.
 
-아직 결측치 삭제·대체, 데이터 타입 변환, 문자열 정리 등의 전처리는 수행하지 않았습니다.
+이 초기 확인 단계에서는 결측치 삭제·대체, 데이터 타입 변환, 문자열 정리 등의 전처리를 수행하지 않았습니다.
 
 ### 데이터 품질 추가 확인
 
@@ -208,7 +208,7 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 숫자 개념이 문자열로 저장된 `mileage`, `engine`, `max_power`, `torque` 컬럼의 실제 표기 형식을 확인했습니다.
 
-아직 문자열을 숫자형으로 변환하거나 원본 값을 수정하지 않았습니다.
+이 형식 확인 단계에서는 문자열을 숫자형으로 변환하거나 값을 수정하지 않았습니다.
 
 ##### `mileage`
 
@@ -259,7 +259,7 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 `0.0 kmpl`은 실제 연비값으로 그대로 사용하기보다 유효한 수치로 보기 어려운 값으로 판단했으며, 이후 전처리에서 결측값으로 취급하기로 결정했습니다. 다만 다른 차량의 mileage나 평균·중앙값으로 임의 대체하는 방법은 아직 결정하지 않았습니다.
 
-현재 단계에서는 `0.0 kmpl` 값을 실제로 변경하지 않았습니다.
+이 조사 단계에서는 `0.0 kmpl` 값을 실제로 변경하지 않았습니다.
 
 ##### `mileage` 전처리 적용
 
@@ -345,7 +345,44 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 따라서 `engine`은 별도의 예외값 처리 없이 문자열에서 숫자 부분을 추출해 숫자형으로 변환하기로 결정했습니다.
 
-기존 결측치 `208`행은 그대로 결측 상태로 유지하며, 현재 단계에서는 실제 숫자형 변환은 아직 적용하지 않았습니다.
+기존 결측치 `208`행은 그대로 결측 상태로 유지하기로 했으며, 이 조사 단계에서는 실제 숫자형 변환을 적용하지 않았습니다.
+
+##### `engine` 전처리 적용
+
+확인한 처리 기준을 바탕으로 `02_preprocessing.ipynb`에서 실제 `engine` 전처리를 적용했습니다.
+
+`engine` 문자열에서 숫자 부분만 추출해 `df_preprocessed["engine"]`에 숫자형으로 저장했습니다.
+
+예:
+
+- `1248 CC` → `1248.0`
+- `796 CC` → `796.0`
+
+처리 결과:
+
+- 데이터 타입: `float64`
+- 숫자값이 존재하는 engine: `6,718`행
+- 기존 engine 결측치: `208`행
+- 처리 후 engine 결측치: `208`행
+- 처리 후 engine 0 이하 값: `0`행
+
+숫자형 변환 후 분포는 조사 단계와 동일하게 유지되었습니다.
+
+- 평균: 약 `1,430.89`
+- 중앙값: `1,248`
+- 최솟값: `624`
+- 최댓값: `3,604`
+
+숫자 변환 과정에서 추가로 발생한 결측치는 없었습니다.
+
+또한 기존에 전처리한 `mileage` 상태도 그대로 유지되었습니다.
+
+- mileage 결측치: `223`행
+- mileage 0값: `0`행
+
+처리 후 데이터 크기는 `6,926행 × 13열`로 유지되었으며, 새롭게 발생한 완전 중복 행은 없었습니다.
+
+이번 단계에서는 `engine`의 기존 결측치 `208`행을 대체하지 않았으며, 다른 컬럼의 값도 수정하지 않았습니다.
 
 ##### `max_power`
 
@@ -432,5 +469,6 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 - mileage 단위와 0값 패턴 확인 및 처리 기준 결정
 - mileage 숫자형 변환 및 0값 결측 처리 적용
 - engine 숫자 범위 및 예외값 확인 후 숫자형 변환 기준 결정
+- engine 숫자형 변환 적용 및 결과 검증
 
-아직 mileage 결측값의 대체 여부 결정, engine 실제 숫자형 변환, max_power·torque 문자열 전처리, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
+아직 mileage·engine 결측값의 대체 여부 결정, max_power·torque 문자열 전처리, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
