@@ -464,6 +464,51 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 현재 단계에서는 `df_preprocessed["max_power"]` 값을 실제로 변경하지 않았습니다.
 
+##### `max_power` 전처리 적용
+
+확인한 처리 기준을 바탕으로 `02_preprocessing.ipynb`에서 실제 `max_power` 전처리를 적용했습니다.
+
+`max_power` 문자열에서 숫자 부분을 추출해 `df_preprocessed["max_power"]`에 숫자형으로 저장했습니다.
+
+이 과정에서 숫자가 존재하지 않았던 ` bhp` 1행은 결측값으로 변환되었으며, 유효한 출력값으로 보기 어렵다고 판단한 숫자값 `0` 3행도 결측값으로 처리했습니다.
+
+동일한 `name + year`의 다른 행에서 확인한 `67.1`, `74.0`, `74.0` 값을 직접 대입하지는 않았습니다.
+
+처리 결과:
+
+- 데이터 타입: `float64`
+- 숫자값이 남아 있는 max_power: `6,717`행
+- 기존 max_power 결측치: `205`행
+- 숫자가 없던 ` bhp`: `1`행
+- 추가로 결측 처리한 0값: `3`행
+- 처리 후 max_power 결측치: `209`행
+- 처리 후 남은 max_power 0값: `0`행
+
+처리 후 숫자값의 분포는 다음과 같습니다.
+
+- 평균: 약 `87.77`
+- 중앙값: `81.83`
+- 최솟값: `32.8`
+- 최댓값: `400.0`
+
+예외값으로 확인했던 다음 4개 행은 모두 결측값으로 처리된 것을 확인했습니다.
+
+- `Maruti Alto K10 LXI`, 2011
+- `Maruti Swift Dzire VDI Optional`, 2017
+- `Tata Indica Vista Quadrajet LS`, 2012
+- `Maruti Omni CNG`, 2000
+
+기존에 적용한 `mileage`와 `engine` 전처리 상태도 그대로 유지되었습니다.
+
+- mileage 결측치: `223`행
+- mileage 0값: `0`행
+- engine 결측치: `208`행
+- engine 0 이하 값: `0`행
+
+처리 후 데이터 크기는 `6,926행 × 13열`로 유지되었으며, 새롭게 발생한 완전 중복 행은 없었습니다.
+
+이번 단계에서는 `max_power` 결측값을 평균·중앙값이나 동일 차량의 다른 출력값으로 대체하지 않았습니다.
+
 ##### `torque`
 
 `torque`는 다른 제원 컬럼보다 표기 방식이 다양했습니다.
@@ -535,5 +580,6 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 - engine 숫자 범위 및 예외값 확인 후 숫자형 변환 기준 결정
 - engine 숫자형 변환 적용 및 결과 검증
 - max_power 숫자 범위와 예외값 확인 후 처리 기준 결정
+- max_power 숫자형 변환 및 예외값 결측 처리 적용
 
-아직 mileage·engine·max_power 결측값의 대체 여부 결정, max_power 실제 숫자형 변환, torque 문자열 전처리, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
+아직 mileage·engine·max_power 결측값의 대체 여부 결정, torque 문자열 전처리, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
