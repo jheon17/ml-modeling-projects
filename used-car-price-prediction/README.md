@@ -791,6 +791,70 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 - CarDekho, Maruti Suzuki Zen specifications: https://www.cardekho.com/maruti/maruti-zen-specifications.htm
 - VirtuaGarage, Maruti Suzuki Zen-D specifications: https://www.virtuagarage.com/maruti/unordered/maruti-suzuki-zen-d/73852/
 
+##### `torque` 최종 처리 규칙 후보 검증
+
+기존 조사와 외부 제원 교차검증 결과를 바탕으로, 실제 `torque` 컬럼에 적용하기 전 최종 Nm 후보값을 생성해 검증했습니다.
+
+최종 처리 후보 규칙은 다음과 같습니다.
+
+- `Nm only`: 첫 번째 숫자를 Nm로 사용
+- `kgm only`이면서 첫 번째 숫자 50 미만: `1 kgf·m = 9.80665 Nm` 기준으로 변환
+- `Nm`과 `kgm`이 모두 있는 경우: 명시된 Nm 값 사용
+- 큰 `kgm` 표기 중 BMW 2행:
+  - `51@ 1,750-3,000(kgm@ rpm)` → 약 `500.14 Nm`
+  - `53@ 2,000-2,750(kgm@ rpm)` → 약 `519.75 Nm`
+- 그 외 큰 `kgm` 표기 21행: 첫 번째 숫자를 Nm로 사용
+- 단위가 없는 10행: 첫 번째 숫자를 Nm로 사용
+- `789Nm@ 2250rpm` 3행: 유효한 값으로 보기 어려워 결측 처리
+
+기존에 미확정이었던 33행은 이 규칙을 적용한 후보값에서 모두 해석되었습니다.
+
+- BMW 실제 kgm 변환: `2행`
+- 첫 번째 숫자를 Nm로 사용하는 행: `31행`
+- 미해석 잔여: `0행`
+
+최종 Nm 후보값은 다음과 같이 구성되었습니다.
+
+- 유효 후보값: `6,714행`
+- 결측 후보값: `212행`
+
+결측 `212행`은 정확히 다음으로 구성됩니다.
+
+- 원래 torque 결측: `209행`
+- `789Nm` 오류 의심값: `3행`
+
+전체 데이터 `6,926행` 기준으로 약 `96.94%`에서 torque Nm 후보값을 확보했습니다.
+
+원래 non-null torque `6,717행`을 기준으로는 약 `99.96%`가 최종 유효 후보값으로 남았습니다.
+
+최종 후보값 분포는 다음과 같습니다.
+
+- count: `6,714`
+- mean: 약 `170.68`
+- std: 약 `83.59`
+- min: 약 `47.07`
+- 25%: `110`
+- median: `160`
+- 75%: 약 `200.06`
+- max: `640`
+
+기존 극단값이었던 `789Nm` 3행을 결측 처리한 뒤 후보값의 최댓값은 `640Nm`으로 내려갔습니다.
+
+상위 값에는 Volvo XC90, BMW 6 Series/X7, Mercedes-Benz S/M/GL-Class, Jaguar XF, Audi Q5/Q7 등 고출력 차량이 포함되었고, 하위 값에는 Tata Nano, Maruti 800/Omni 등 소형 차량이 포함되었습니다.
+
+이번 검증에서는 최종 후보값 상·하위 영역에서 추가적인 명백한 이상 패턴은 확인되지 않았습니다.
+
+현재 단계에서는 이 규칙을 아직 `df_preprocessed["torque"]`에 실제 적용하지 않았습니다.
+
+외부 제원 교차검증에서는 대표적인 미확정 문자열을 차량 제원과 비교해 단위 해석을 확인했습니다.
+
+- BMW 5 Series 530d의 `51@ 1,750-3,000(kgm@ rpm)`은 약 500 Nm 제원과 비교해 실제 kgm 표기로 판단
+- BMW X5 3.0d의 `53@ 2,000-2,750(kgm@ rpm)`은 약 520 Nm 제원과 비교해 실제 kgm 표기로 판단
+- Ford Ikon의 `130@ 2500(kgm@ rpm)`, Mahindra Logan의 `110@ 3,000(kgm@ rpm)`, Maruti SX4의 `145@ 4,100(kgm@ rpm)` 등은 외부 Nm 제원과 비교해 첫 번째 숫자를 Nm 값으로 해석
+- Honda Jazz의 `110(11.2)@ 4800`, Skoda Octavia의 `210 / 1900`, Skoda Superb의 `250@ 1250-5000rpm`, Mercedes-Benz M-Class의 `510@ 1600-2400` 등 단위 없는 표기도 외부 Nm 제원과 비교
+
+외부 자료는 데이터의 특정 값을 직접 대입하기 위한 것이 아니라, 문자열에 포함된 숫자의 단위 해석을 확인하기 위한 참고 근거로만 사용했습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -825,5 +889,6 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 - torque 단위·괄호·rpm 표기 형식 세부 조사
 - torque의 큰 kgm 표기값과 괄호형 패턴 추가 조사
 - torque Nm 후보값 범위 및 789Nm 극단값 검증
+- torque 최종 Nm 처리 규칙 후보 검증
 
-아직 mileage·engine·max_power 결측값의 대체 여부 결정, torque의 큰 kgm·단위 없는 값 처리 기준 확정 및 실제 문자열 전처리, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
+아직 mileage·engine·max_power·torque 결측값의 대체 여부 결정, torque 최종 Nm 처리 규칙의 실제 컬럼 적용, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
