@@ -855,6 +855,70 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 
 외부 자료는 데이터의 특정 값을 직접 대입하기 위한 것이 아니라, 문자열에 포함된 숫자의 단위 해석을 확인하기 위한 참고 근거로만 사용했습니다.
 
+##### `torque` Nm 숫자형 변환 실제 적용
+
+검증한 최종 처리 규칙을 `df_preprocessed["torque"]`에 실제 적용했습니다.
+
+기존 문자열 형태의 torque를 Nm 기준 숫자형 변수로 변환했으며, 적용 후 dtype은 `float64`가 되었습니다.
+
+적용한 주요 규칙은 다음과 같습니다.
+
+- 명시적인 `Nm` 표기: 첫 번째 숫자를 Nm로 사용
+- `kgm` 표기 중 첫 번째 숫자가 50 미만인 경우: `1 kgf·m = 9.80665 Nm` 기준으로 변환
+- Nm과 kgm이 함께 표기된 경우: 명시된 Nm 값 사용
+- BMW 5 Series 530d의 `51@ 1,750-3,000(kgm@ rpm)` → 약 `500.14 Nm`
+- BMW X5 3.0d의 `53@ 2,000-2,750(kgm@ rpm)` → 약 `519.75 Nm`
+- 나머지 큰 `kgm` 표기 21행: 검증 결과에 따라 첫 번째 숫자를 Nm로 사용
+- 단위 없는 10행: 검증 결과에 따라 첫 번째 숫자를 Nm로 사용
+- `789Nm@ 2250rpm` 3행: 유효한 값으로 사용하기 어려워 결측 처리
+
+적용 결과는 다음과 같습니다.
+
+- 전체 행: `6,926`
+- torque 유효값: `6,714`
+- torque 결측값: `212`
+- dtype: `float64`
+
+결측 `212행`은 다음으로 구성됩니다.
+
+- 기존 torque 결측: `209행`
+- `789Nm@ 2250rpm` 오류 의심값: `3행`
+
+변환 후 torque 분포는 다음과 같습니다.
+
+- count: `6,714`
+- mean: 약 `170.68`
+- std: 약 `83.59`
+- min: 약 `47.07`
+- 25%: `110`
+- median: `160`
+- 75%: 약 `200.06`
+- max: `640`
+
+특수 처리 결과도 다시 확인했습니다.
+
+- Maruti Zen D의 기존 `789Nm@ 2250rpm` 3행 → 결측
+- BMW 5 Series 530d → 약 `500.14 Nm`
+- BMW X5 3.0d → 약 `519.75 Nm`
+- Skoda Superb `250@ 1250-5000rpm` → `250 Nm`
+- Mercedes-Benz M-Class `510@ 1600-2400` → `510 Nm`
+- Honda Jazz `110(11.2)@ 4800` → `110 Nm`
+- Skoda Octavia `210 / 1900` → `210 Nm`
+
+`torque` 적용 후에도 기존 전처리 결과는 유지되었습니다.
+
+- mileage 결측: `223`
+- mileage 0값: `0`
+- engine 결측: `208`
+- engine 0 이하: `0`
+- max_power 결측: `209`
+- max_power 0값: `0`
+- torque 결측: `212`
+
+전체 shape은 `(6926, 13)`, 완전 중복 행은 `0`으로 유지되었습니다.
+
+원본 정제본 역할의 `df_clean`은 수정하지 않았으며, `df_clean["torque"]`는 기존 문자열 상태를 유지했습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -890,5 +954,6 @@ https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho
 - torque의 큰 kgm 표기값과 괄호형 패턴 추가 조사
 - torque Nm 후보값 범위 및 789Nm 극단값 검증
 - torque 최종 Nm 처리 규칙 후보 검증
+- torque Nm 숫자형 변환 실제 적용
 
-아직 mileage·engine·max_power·torque 결측값의 대체 여부 결정, torque 최종 Nm 처리 규칙의 실제 컬럼 적용, 범주형 인코딩, EDA, train/test 분리, 모델 학습은 진행하지 않았습니다.
+아직 mileage·engine·max_power·torque·seats 결측값의 처리 방식 결정, name 및 범주형 변수 처리, train/test 분리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
