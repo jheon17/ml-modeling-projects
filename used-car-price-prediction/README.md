@@ -1871,6 +1871,85 @@ test 전체 범주형 One-Hot 행 합 분포는 다음과 같습니다.
 
 현재 단계에서는 scaling, target 변환, 모델 학습은 수행하지 않았습니다.
 
+##### 수치형 feature StandardScaler 적용
+
+One-Hot Encoding까지 완료한 226개 feature 중 scale에 민감한 모델에서 사용할 별도 입력을 만들기 위해 다음 7개 수치형 feature에 `StandardScaler`를 적용했습니다.
+
+- `year`
+- `km_driven`
+- `mileage`
+- `engine`
+- `max_power`
+- `torque`
+- `seats`
+
+결측 indicator 5개와 One-Hot feature 214개는 `0/1` 의미를 유지하기 위해 scaling 대상에서 제외했습니다.
+
+scaler는 데이터 누수를 피하기 위해 `X_train_encoded`의 7개 대상 컬럼에서만 `fit`했으며, test에는 train에서 학습한 동일한 scaler로 `transform`만 적용했습니다.
+
+train에서 학습된 평균과 scale은 다음과 같습니다.
+
+| feature | train mean | scale |
+|---|---:|---:|
+| year | 2013.426638 | 4.070384 |
+| km_driven | 74,232.335499 | 60,928.279621 |
+| mileage | 19.499617 | 3.876105 |
+| engine | 1,426.679661 | 486.246095 |
+| max_power | 87.493679 | 31.238338 |
+| torque | 170.152914 | 82.042953 |
+| seats | 5.424472 | 0.979085 |
+
+`StandardScaler.scale_`는 train 데이터의 `std(ddof=0)`와 일치하는 것을 확인했습니다.
+
+7개 feature만 변환한 배열 shape는 다음과 같습니다.
+
+- train: `(5,541, 7)`
+- test: `(1,385, 7)`
+
+원본 `X_train_encoded`, `X_test_encoded`는 유지하고 별도의 scaled feature DataFrame을 생성했습니다.
+
+- `X_train_scaled`: `(5,541, 226)`
+- `X_test_scaled`: `(1,385, 226)`
+
+따라서 scaling 전후 feature 수와 컬럼 순서는 동일하게 유지했습니다.
+
+train의 scaling 대상 7개 feature는 변환 후:
+
+- 평균이 모두 `0`에 가까움
+- `std(ddof=0)`가 모두 `1`에 가까움
+
+을 확인했습니다.
+
+test는 train에서 학습한 통계로만 transform했기 때문에 평균과 표준편차가 정확히 `0`, `1`이 되지는 않았습니다. test 데이터를 다시 fit해 분포를 맞추는 작업은 수행하지 않았습니다.
+
+결측 indicator 5개와 One-Hot feature 214개도 scaling 전후 값이 완전히 동일함을 확인했습니다.
+
+- indicator train/test 불변
+- One-Hot train/test 불변
+- One-Hot 값은 계속 `0.0/1.0`
+
+scaled feature에는 train/test 모두 결측값이 없었습니다.
+
+최종 `X_train_scaled`, `X_test_scaled`의 226개 feature는 모두 `float64`입니다.
+
+현재 모델 입력 후보는 두 종류로 유지합니다.
+
+- `X_train_encoded`, `X_test_encoded`
+  - scaling하지 않은 226개 feature
+  - 트리 기반 모델 등에 사용할 후보
+- `X_train_scaled`, `X_test_scaled`
+  - 동일한 226개 feature
+  - 연속·수치형 7개만 train 기준 `StandardScaler` 적용
+  - scale에 민감한 모델에 사용할 후보
+
+아직 두 입력 중 어느 쪽의 모델 성능이 더 좋은지는 검증하지 않았습니다.
+
+구현 과정에서 pandas 3에서는 기존 `int64` 컬럼에 실수형 scaling 결과를 직접 대입하는 방식이 정상 동작하지 않아 첫 시도가 중단됐습니다. 원본 encoded 데이터는 변경하지 않은 상태에서 별도 복사본의 scaling 대상 컬럼을 `float64`로 변환한 뒤 다시 적용해 정상 실행했습니다.
+
+기존 `X_train_encoded`, `X_test_encoded`, 이전 feature DataFrame, 원본 split 데이터와 `y_train`, `y_test`는 변경하지 않았습니다.
+
+현재 단계에서는 scaling까지 완료했으며 target 변환, feature selection, 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1921,5 +2000,6 @@ test 전체 범주형 One-Hot 행 합 분포는 다음과 같습니다.
 - name 1·2·3단어 prefix 비교를 통해 2단어 prefix를 현재 유력 후보로 선정
 - full name 대신 2단어 `name_prefix_2`를 baseline feature로 실제 파생하고 별도 feature DataFrame 구성
 - 범주형 5개 변수를 train 기준 One-Hot Encoding하고 226개 모델 입력 feature 구성
+- 수치형 7개 feature에 train 기준 StandardScaler를 적용한 별도 scaled 모델 입력 구성
 
-아직 scaling 방식 결정 및 적용, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 최종 모델링용 전처리 구조 정리, EDA, baseline 모델 학습 및 성능 평가는 진행하지 않았습니다.
