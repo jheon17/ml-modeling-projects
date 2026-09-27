@@ -1612,6 +1612,93 @@ train의 범주 수는 full `name`이 첫 단어 brand proxy보다 약 `60배` �
 
 `OneHotEncoder(handle_unknown="ignore")` 객체가 정상 생성되는 것은 확인했지만 아직 `fit`, `transform`, 실제 범주형 인코딩은 수행하지 않았습니다.
 
+##### name prefix 수준 비교
+
+full `name`의 높은 cardinality와 unseen category 문제를 완화하면서 차량 정보를 어느 정도 유지할 수 있는 표현을 찾기 위해 `name`의 첫 1단어, 2단어, 3단어 prefix를 비교했습니다.
+
+이 prefix들은 실제 정제된 제조사명이나 모델명이 아니라 `name` 문자열 앞부분을 기계적으로 잘라 만든 조사용 proxy입니다.
+
+예를 들어:
+
+- `Maruti Alto K10 2010-2014 VXI`
+  - 1단어: `Maruti`
+  - 2단어: `Maruti Alto`
+  - 3단어: `Maruti Alto K10`
+- `Hyundai Grand i10 Asta Option`
+  - 1단어: `Hyundai`
+  - 2단어: `Hyundai Grand`
+  - 3단어: `Hyundai Grand i10`
+
+따라서 특히 2단어 prefix를 실제 차량 모델명이라고 해석하지 않았습니다.
+
+각 표현 수준의 cardinality와 test unseen 결과는 다음과 같았습니다.
+
+| 표현 방식 | train 고유 범주 | test 고유 범주 | test unseen 고유 범주 | unseen test 행 | unseen 비율 |
+|---|---:|---:|---:|---:|---:|
+| 1단어 prefix | 31 | 23 | 1 | 1 | 0.07% |
+| 2단어 prefix | 200 | 146 | 10 | 14 | 1.01% |
+| 3단어 prefix | 652 | 375 | 44 | 52 | 3.75% |
+| full name | 1,859 | 813 | 199 | 215 | 15.52% |
+
+prefix 수준이 길어질수록 세부 정보는 더 유지되지만 범주 수와 test unseen도 함께 증가했습니다.
+
+train에서 한 번만 등장한 희소 범주도 다음과 같이 증가했습니다.
+
+| 표현 방식 | 1회 등장 범주 수 | 해당 train 행 비율 |
+|---|---:|---:|
+| 1단어 prefix | 3 | 0.05% |
+| 2단어 prefix | 33 | 0.60% |
+| 3단어 prefix | 200 | 3.61% |
+| full name | 926 | 16.71% |
+
+full `name` 대비 train 범주 수 감소 정도는 다음과 같았습니다.
+
+| 표현 방식 | train 범주 수 | full name 대비 범주 비율 | 범주 감소율 |
+|---|---:|---:|---:|
+| 1단어 prefix | 31 | 1.67% | 98.33% |
+| 2단어 prefix | 200 | 10.76% | 89.24% |
+| 3단어 prefix | 652 | 35.07% | 64.93% |
+
+2단어 prefix는 1단어보다 범주 수가 `31 → 200`으로 증가해 더 많은 차량 세부 정보를 구분할 수 있었습니다.
+
+반면 3단어 prefix는 2단어보다 범주 수가 `200 → 652`, 약 `3.26배` 증가했고 test unseen 비율도 `1.01% → 3.75%`로 증가했습니다.
+
+full `name`은 train에서 `1,859개` 범주와 test unseen 비율 약 `15.52%`를 보여 가장 희소한 구조였습니다.
+
+prefix별로 여러 full `name`이 하나로 합쳐지는 정도도 확인했습니다.
+
+2단어 prefix의 예:
+
+- `Maruti Swift`: 535행, 고유 full name 87개
+- `Hyundai i20`: 233행, 고유 full name 63개
+- `Mahindra Scorpio`: 119행, 고유 full name 56개
+- `Honda City`: 145행, 고유 full name 50개
+- `Toyota Innova`: 154행, 고유 full name 47개
+
+3단어 prefix의 예:
+
+- `Maruti Wagon R`: 198행, 고유 full name 37개
+- `Maruti Swift Dzire`: 273행, 고유 full name 34개
+- `Toyota Innova 2.5`: 120행, 고유 full name 33개
+- `Hyundai Grand i10`: 114행, 고유 full name 27개
+
+즉 2단어 prefix는 3단어보다 더 많은 세부 name을 하나의 범주로 합치지만, 그만큼 cardinality와 희소성을 크게 낮추는 특성이 있었습니다.
+
+조사 결과만 놓고 보면:
+
+- 1단어 prefix는 cardinality와 unseen 문제는 가장 작지만 차량 세부 정보가 많이 합쳐집니다.
+- full `name`은 세부 정보는 가장 많이 유지하지만 cardinality와 unseen category가 큽니다.
+- 3단어 prefix는 full `name`보다 범주 수를 줄이지만 train 범주가 652개이고 test unseen 비율도 약 3.75%였습니다.
+- 2단어 prefix는 train 범주 200개, test unseen 비율 약 1.01%, train 1회 등장 범주 33개로 확인됐습니다.
+
+따라서 현재 조사 결과에서는 **2단어 name prefix를 정보 보존과 희소성 사이의 상대적으로 균형 있는 후보**로 판단했습니다.
+
+다만 2단어 prefix가 항상 실제 차량 모델명과 일치하는 것은 아니므로 아직 최종 feature 처리 방식으로 확정하거나 실제 컬럼으로 추가하지 않았습니다.
+
+모든 prefix에서 결측·빈 문자열·공백 문자열은 없었고, 하나의 full `name`이 서로 다른 prefix로 매핑되는 경우도 확인되지 않았습니다.
+
+현재 단계에서는 실제 prefix 컬럼 생성, `name` 삭제, One-Hot Encoding, scaling, 모델 학습을 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1659,5 +1746,6 @@ train의 범주 수는 full `name`이 첫 단어 brand proxy보다 약 `60배` �
 - train 분포 검토 후 연속형 차량 제원 median·seats 최빈값 결측 대체 및 indicator 활용 방식 결정
 - train 기준 차량 제원 결측 대체 및 5개 결측 indicator 실제 적용·검증
 - 범주형 변수 cardinality·unseen 조사 및 저카디널리티 4개 변수 One-Hot Encoding 방향 결정
+- name 1·2·3단어 prefix 비교를 통해 2단어 prefix를 현재 유력 후보로 선정
 
-아직 name 처리 방식 확정, 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 name 최종 처리 방식 확정 및 실제 파생 변수 생성, 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
