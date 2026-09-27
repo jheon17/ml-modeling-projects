@@ -1699,6 +1699,99 @@ prefix별로 여러 full `name`이 하나로 합쳐지는 정도도 확인했습
 
 현재 단계에서는 실제 prefix 컬럼 생성, `name` 삭제, One-Hot Encoding, scaling, 모델 학습을 수행하지 않았습니다.
 
+##### name baseline 처리 방식 적용
+
+앞선 비교 결과를 바탕으로 baseline 모델링용 feature에서는 full `name`을 직접 사용하지 않고, 문자열의 첫 2단어를 `name_prefix_2`로 파생해 사용하기로 결정했습니다.
+
+이 결정은 모델 성능 비교 결과가 아니라 현재 데이터의 cardinality, 희소성, test unseen 비율을 기준으로 정한 baseline feature-engineering 방식입니다.
+
+기존 `X_train_imputed`, `X_test_imputed`는 보존하고 별도의 feature DataFrame을 생성했습니다.
+
+- `X_train_features`: `(5,541, 17)`
+- `X_test_features`: `(1,385, 17)`
+
+새 feature DataFrame에서는:
+
+- full `name` 제외
+- `name_prefix_2` 추가
+- 나머지 기존 feature 유지
+- 차량 제원 결측 indicator 5개 유지
+
+로 구성했습니다.
+
+`name_prefix_2`는 다음과 같이 `name` 문자열의 첫 2단어를 기계적으로 추출한 값입니다.
+
+예:
+
+- `Maruti Alto K10 2010-2014 VXI` → `Maruti Alto`
+- `Hyundai i20 1.4 Magna AT` → `Hyundai i20`
+- `Ford EcoSport 1.5 TDCi Titanium BSIV` → `Ford EcoSport`
+- `Mahindra Bolero Power Plus ZLX` → `Mahindra Bolero`
+
+`name_prefix_2`는 실제 정제된 차량 모델명이나 제조사-모델 매핑이 아니라 문자열 prefix proxy입니다.
+
+실제 적용 후 확인된 결과는 다음과 같습니다.
+
+| 항목 | train | test |
+|---|---:|---:|
+| name_prefix_2 고유값 | 200 | 146 |
+| 결측값 | 0 | 0 |
+| 빈 문자열 | 0 | 0 |
+| 공백만 있는 값 | 0 | 0 |
+
+test에서 train에 존재하지 않는 `name_prefix_2`도 다시 검증했습니다.
+
+- unseen 고유 범주: `10개`
+- unseen test 행: `14행`
+- test 전체 대비: 약 `1.01%`
+
+이는 앞선 조사 결과와 일치했습니다.
+
+baseline 처리 기준은 다음과 같이 정리했습니다.
+
+- full `name`: 모델 입력 후보에서 제외
+- `name_prefix_2`: 실제 파생 변수로 사용
+- 별도 brand feature: 추가하지 않음
+
+2단어 prefix를 선택한 근거는 다음과 같습니다.
+
+- train cardinality: `200`
+- test unseen: `14행`, 약 `1.01%`
+- train에서 1회만 등장하는 범주: `33개`
+- full `name`보다 cardinality와 희소성을 크게 줄임
+- 1단어 prefix보다 더 많은 차량 세부 정보를 유지
+
+다만 현재 단계에서는 이 방식이 모델 성능을 향상시킨다고 판단하지 않았습니다. 실제 효과는 이후 모델 학습과 비교를 통해 확인해야 합니다.
+
+현재 범주형 모델 입력 후보는 다음 5개입니다.
+
+- `name_prefix_2`
+- `fuel`
+- `seller_type`
+- `transmission`
+- `owner`
+
+수치형 및 결측 indicator 후보는 다음 12개입니다.
+
+- `year`
+- `km_driven`
+- `mileage`
+- `engine`
+- `max_power`
+- `torque`
+- `missingindicator_mileage`
+- `missingindicator_engine`
+- `missingindicator_max_power`
+- `missingindicator_torque`
+- `seats`
+- `missingindicator_seats`
+
+따라서 실제 인코딩 전 `X_train_features`, `X_test_features`는 각각 17개 feature를 유지합니다.
+
+두 feature DataFrame의 전체 결측값은 모두 `0`이었으며, 기존 `X_train_imputed`, `X_test_imputed`, 원본 `X_train`, `X_test`, `y_train`, `y_test`는 변경하지 않았습니다.
+
+현재 단계에서는 실제 One-Hot Encoding, scaling, 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1747,5 +1840,6 @@ prefix별로 여러 full `name`이 하나로 합쳐지는 정도도 확인했습
 - train 기준 차량 제원 결측 대체 및 5개 결측 indicator 실제 적용·검증
 - 범주형 변수 cardinality·unseen 조사 및 저카디널리티 4개 변수 One-Hot Encoding 방향 결정
 - name 1·2·3단어 prefix 비교를 통해 2단어 prefix를 현재 유력 후보로 선정
+- full name 대신 2단어 `name_prefix_2`를 baseline feature로 실제 파생하고 별도 feature DataFrame 구성
 
-아직 name 최종 처리 방식 확정 및 실제 파생 변수 생성, 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
