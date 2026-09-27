@@ -1435,6 +1435,86 @@ train에서 관측된 `seats` 값 가운데 약 `75.85%`가 `5`였으며:
 
 현재 단계에서는 결측 처리 방식만 결정했습니다. `SimpleImputer`의 실제 fit/transform, 결측값 대체, indicator 생성은 아직 수행하지 않았습니다.
 
+##### 차량 제원 결측 대체 및 indicator 실제 적용
+
+앞서 결정한 결측 처리 기준을 실제 `X_train`, `X_test`에 적용했습니다.
+
+대체 기준은 test 데이터를 사용하지 않고 `X_train`에서만 `fit`했습니다.
+
+연속형 차량 제원은 다음과 같이 중앙값으로 대체했습니다.
+
+| 컬럼 | 전략 | X_train에서 학습한 값 |
+|---|---|---:|
+| mileage | median | 19.4 |
+| engine | median | 1,248 |
+| max_power | median | 81.83 |
+| torque | median | 160 |
+
+`seats`는 이산형 변수로 보고 최빈값 방식으로 대체했습니다.
+
+| 컬럼 | 전략 | X_train에서 학습한 값 |
+|---|---|---:|
+| seats | most frequent | 5 |
+
+test 데이터에서는 imputer를 다시 fit하지 않고 train에서 학습한 동일한 기준으로 `transform`만 수행했습니다.
+
+실제 변환 후 shape는 다음과 같습니다.
+
+- `X_train_imputed`: `(5,541, 17)`
+- `X_test_imputed`: `(1,385, 17)`
+
+기존 `12개` feature에 차량 제원 5개의 결측 여부 indicator가 추가되어 총 `17개` feature가 되었습니다.
+
+생성된 indicator는 다음과 같습니다.
+
+- `missingindicator_mileage`
+- `missingindicator_engine`
+- `missingindicator_max_power`
+- `missingindicator_torque`
+- `missingindicator_seats`
+
+각 indicator가 실제 원본 결측 패턴과 일치하는지도 검증했습니다.
+
+| 컬럼 | train indicator 1 개수 | test indicator 1 개수 |
+|---|---:|---:|
+| mileage | 173 | 50 |
+| engine | 159 | 49 |
+| max_power | 160 | 49 |
+| torque | 163 | 49 |
+| seats | 159 | 49 |
+
+train과 test 모두 각 indicator가 원본 결측 여부와 정확히 일치했습니다.
+
+차량 제원 5개 컬럼의 결측값은 변환 후 모두 제거됐습니다.
+
+- train 차량 제원 결측값 개수: `814 → 0`
+- test 차량 제원 결측값 개수: `246 → 0`
+
+여기서 `814`, `246`은 결측 행 수가 아니라 5개 차량 제원 컬럼 전체의 결측 셀 개수를 합산한 값입니다.
+
+원래 결측이었던 행에는 train에서 학습한 다음 값이 실제로 적용됐습니다.
+
+- mileage: `19.4`
+- engine: `1,248`
+- max_power: `81.83`
+- torque: `160`
+- seats: `5`
+
+test의 결측 행에도 동일한 train 기준값이 적용됐습니다.
+
+원본 split 데이터는 덮어쓰지 않고 그대로 보존했습니다.
+
+- `X_train`: `(5,541, 12)`
+- `X_test`: `(1,385, 12)`
+- `y_train`, `y_test`: 변경 없음
+- X와 y의 index 정렬: 유지
+
+실제 결측 대체와 indicator 추가 결과는 별도의 `X_train_imputed`, `X_test_imputed`에만 적용했습니다.
+
+대체된 차량 제원과 indicator 컬럼은 현재 `float64`이며, indicator는 `0.0/1.0` 형태입니다. 이번 단계에서는 dtype을 별도로 변경하지 않았습니다.
+
+현재 단계에서는 차량 제원 결측 대체와 indicator 적용까지만 완료했습니다. `name` 및 범주형 변수 처리, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1480,5 +1560,6 @@ train에서 관측된 `seats` 값 가운데 약 `75.85%`가 `5`였으며:
 - scikit-learn dependency 추가 및 train_test_split·SimpleImputer import 검증
 - 가격 구간 기반 stratified train/test split 실제 생성 및 재현성 검증
 - train 분포 검토 후 연속형 차량 제원 median·seats 최빈값 결측 대체 및 indicator 활용 방식 결정
+- train 기준 차량 제원 결측 대체 및 5개 결측 indicator 실제 적용·검증
 
-아직 차량 제원 결측 대체와 indicator 실제 적용, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 name 및 범주형 변수 처리, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
