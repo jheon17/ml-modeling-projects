@@ -1384,6 +1384,57 @@ test 평균은 train보다 약 `3,719` 낮았고 중앙값은 `5,000` 낮았습�
 
 현재 단계에서는 실제 train/test split 생성까지만 완료했습니다. 결측값 대체, 결측 indicator 생성, `name` 및 범주형 변수 처리, scaling, 모델 학습은 아직 수행하지 않았습니다.
 
+##### 차량 제원 결측 대체 방식 결정
+
+실제 train/test split 이후 결측값 대체 방식을 결정하기 위해 대체 통계는 test 데이터를 사용하지 않고 `X_train`에서만 조사했습니다.
+
+연속형 차량 제원 4개의 분포는 다음과 같았습니다.
+
+| 컬럼 | mean | median | skewness | mean-median 상대 차이 |
+|---|---:|---:|---:|---:|
+| mileage | 약 19.50 | 19.40 | 약 0.06 | 약 0.53% |
+| engine | 약 1,431.96 | 1,248 | 약 1.19 | 약 14.74% |
+| max_power | 약 87.66 | 81.83 | 약 1.74 | 약 7.13% |
+| torque | 약 170.46 | 160 | 약 1.24 | 약 6.54% |
+
+`mileage`는 평균과 중앙값이 거의 같고 분포도 비교적 대칭적이었습니다.
+
+반면 `engine`, `max_power`, `torque`는 양의 왜도와 평균-중앙값 차이가 확인됐습니다. 특히 `engine`은 평균이 중앙값보다 약 `14.74%` 높았습니다.
+
+IQR 기준 범위 밖 값도 확인했지만 이를 오류값으로 판정하거나 제거하지 않았습니다. 이는 분포의 꼬리와 평균값의 민감도를 확인하기 위한 조사로만 사용했습니다.
+
+이 결과를 바탕으로 연속형 차량 제원인 `mileage`, `engine`, `max_power`, `torque`는 모두 `X_train`에서 계산한 중앙값(median)으로 결측값을 대체하기로 결정했습니다.
+
+`mileage`는 평균 대체도 가능한 분포였지만, 나머지 연속형 제원과 동일한 기준을 적용하고 극단값의 영향을 줄이기 위해 중앙값 방식을 함께 사용하기로 했습니다.
+
+`seats`는 다른 차량 제원과 별도로 검토했습니다.
+
+train에서 관측된 `seats` 값 가운데 약 `75.85%`가 `5`였으며:
+
+- mean: 약 `5.44`
+- median: `5`
+- mode: `5`
+
+였습니다.
+
+`seats`는 연속적인 측정값보다 정해진 좌석 수를 갖는 이산형 변수에 가깝기 때문에 `X_train`의 최빈값(most frequent)으로 결측값을 대체하기로 결정했습니다.
+
+현재 결측 대체 기준은 다음과 같습니다.
+
+- `mileage`: median
+- `engine`: median
+- `max_power`: median
+- `torque`: median
+- `seats`: most frequent
+
+또한 결측 자체가 특정 차량군에서 구조적인 패턴을 보였던 이전 조사 결과를 고려해, 대체 후에도 원래 값이 결측이었는지를 모델이 구분할 수 있도록 결측 indicator를 함께 유지하기로 결정했습니다.
+
+다섯 컬럼 모두 `X_train`에 실제 결측값이 존재하므로 모델링용 전처리에서는 각 컬럼의 결측 여부 정보를 보존할 수 있습니다.
+
+대체 통계와 indicator 기준은 모두 train 데이터에서만 학습하며, test 데이터에는 train에서 학습한 동일한 기준을 적용합니다. test 데이터 자체의 평균, 중앙값, 최빈값을 이용해 결측값을 대체하지 않습니다.
+
+현재 단계에서는 결측 처리 방식만 결정했습니다. `SimpleImputer`의 실제 fit/transform, 결측값 대체, indicator 생성은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1428,5 +1479,6 @@ test 평균은 train보다 약 `3,719` 낮았고 중앙값은 `5,000` 낮았습�
 - random vs 가격 구간 stratified split 비교 후 80:20 가격 구간 stratified 방식 결정
 - scikit-learn dependency 추가 및 train_test_split·SimpleImputer import 검증
 - 가격 구간 기반 stratified train/test split 실제 생성 및 재현성 검증
+- train 분포 검토 후 연속형 차량 제원 median·seats 최빈값 결측 대체 및 indicator 활용 방식 결정
 
-아직 mileage·engine·max_power·torque·seats의 결측 대체 방식과 결측 indicator 구현, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 차량 제원 결측 대체와 indicator 실제 적용, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
