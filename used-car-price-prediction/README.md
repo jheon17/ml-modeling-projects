@@ -1284,6 +1284,106 @@ dependency는 일회성 환경 설치로만 남기지 않고 `pyproject.toml`과
 
 이번 단계에서는 라이브러리 설치와 import 검증만 수행했습니다. 실제 train/test split, 결측값 대체, 결측 indicator 생성, 범주형 인코딩, 모델 학습은 아직 수행하지 않았습니다.
 
+##### 가격 구간 기반 stratified train/test split 실제 생성
+
+앞서 비교를 통해 결정한 `80:20 가격 구간 기반 stratified split`을 scikit-learn의 `train_test_split`으로 실제 생성했습니다.
+
+분할에는 다음 조건을 사용했습니다.
+
+- `test_size=1385`
+- `random_state=42`
+- `stratify`: `selling_price`의 고정 가격 구간
+
+`test_size`는 비율 `0.2`가 아니라 정수 `1,385`로 지정해 앞서 검증한 train `5,541행`, test `1,385행` 구성을 그대로 유지했습니다.
+
+stratification에 사용한 가격 구간은 다음과 같습니다.
+
+- `0~199,999`
+- `200,000~399,999`
+- `400,000~599,999`
+- `600,000~999,999`
+- `1,000,000 이상`
+
+가격 구간은 split을 위한 임시 Series로만 사용했으며 원본 DataFrame의 실제 컬럼으로 추가하지 않았습니다.
+
+target인 `selling_price`를 제외해 feature와 target을 다음과 같이 분리했습니다.
+
+- X: `(6,926, 12)`
+- y: `(6,926,)`
+- X에 `selling_price` 포함: 없음
+
+실제 split 결과는 다음과 같습니다.
+
+| 데이터 | shape |
+|---|---:|
+| X_train | `(5,541, 12)` |
+| X_test | `(1,385, 12)` |
+| y_train | `(5,541,)` |
+| y_test | `(1,385,)` |
+
+train/test 인덱스도 검증했습니다.
+
+- train/test 중복 인덱스: `0`
+- 누락 인덱스: `0`
+- 추가 인덱스: `0`
+- X_train과 y_train 인덱스 정렬: `True`
+- X_test와 y_test 인덱스 정렬: `True`
+
+실제 split 이후 가격 구간 분포는 다음과 같았습니다.
+
+| 가격 구간 | 전체 비율 | train 비율 | test 비율 |
+|---|---:|---:|---:|
+| 0~199,999 | 17.1383% | 17.1449% | 17.1119% |
+| 200,000~399,999 | 30.5082% | 30.4999% | 30.5415% |
+| 400,000~599,999 | 22.8848% | 22.8840% | 22.8881% |
+| 600,000~999,999 | 22.0185% | 22.0177% | 22.0217% |
+| 1,000,000 이상 | 7.4502% | 7.4535% | 7.4368% |
+
+전체 가격 구간 비율과 test 가격 구간 비율의 최대 절대 차이는 약 `0.0333%p`였습니다.
+
+실제 target 분포는 다음과 같았습니다.
+
+| 통계 | y_train | y_test |
+|---|---:|---:|
+| mean | 약 518,014 | 약 514,296 |
+| median | 405,000 | 400,000 |
+| 25% | 250,000 | 250,000 |
+| 75% | 630,000 | 650,000 |
+| max | 10,000,000 | 5,800,000 |
+| skewness | 약 5.78 | 약 4.43 |
+
+test 평균은 train보다 약 `3,719` 낮았고 중앙값은 `5,000` 낮았습니다.
+
+앞서 NumPy로 만든 조사용 stratified 후보와 실제 수치가 일부 다른 것은 scikit-learn의 `train_test_split`이 각 가격 구간 안에서 선택한 실제 행이 조사용 구현과 다르기 때문입니다. 이후 전처리와 모델링에서는 이번에 실제 생성한 scikit-learn split을 기준으로 사용합니다.
+
+차량 제원 결측 분포도 확인했습니다.
+
+| 결측 패턴 | train | train 비율 | test | test 비율 |
+|---|---:|---:|---:|---:|
+| 하나라도 제원 결측 | 177 | 3.1944% | 50 | 3.6101% |
+| 5개 제원 모두 결측 | 159 | 2.8695% | 49 | 3.5379% |
+
+결측 행은 train과 test 양쪽에 존재했으며 실제 결측값 대체는 아직 수행하지 않았습니다.
+
+모델 입력 feature는 총 `12개`이며 다음과 같습니다.
+
+- `name`
+- `year`
+- `km_driven`
+- `fuel`
+- `seller_type`
+- `transmission`
+- `owner`
+- `mileage`
+- `engine`
+- `max_power`
+- `torque`
+- `seats`
+
+동일한 `test_size=1385`, `random_state=42`, 동일 가격 구간으로 split을 다시 생성했을 때 train/test 및 X/y 인덱스가 모두 동일한 것도 확인해 분할의 재현성을 검증했습니다.
+
+현재 단계에서는 실제 train/test split 생성까지만 완료했습니다. 결측값 대체, 결측 indicator 생성, `name` 및 범주형 변수 처리, scaling, 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1327,5 +1427,6 @@ dependency는 일회성 환경 설치로만 남기지 않고 `pyproject.toml`과
 - 80:20 random train/test split 후보의 target·범주·결측 분포 사전 검증
 - random vs 가격 구간 stratified split 비교 후 80:20 가격 구간 stratified 방식 결정
 - scikit-learn dependency 추가 및 train_test_split·SimpleImputer import 검증
+- 가격 구간 기반 stratified train/test split 실제 생성 및 재현성 검증
 
-아직 실제 train/test split 생성, mileage·engine·max_power·torque·seats의 결측 대체 방식과 결측 indicator 구현, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 mileage·engine·max_power·torque·seats의 결측 대체 방식과 결측 indicator 구현, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
