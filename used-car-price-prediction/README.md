@@ -1792,6 +1792,85 @@ baseline 처리 기준은 다음과 같이 정리했습니다.
 
 현재 단계에서는 실제 One-Hot Encoding, scaling, 모델 학습은 아직 수행하지 않았습니다.
 
+##### 범주형 변수 One-Hot Encoding 실제 적용
+
+baseline 모델 입력 후보의 범주형 변수 5개에 One-Hot Encoding을 실제 적용했습니다.
+
+적용 대상은 다음과 같습니다.
+
+- `name_prefix_2`
+- `fuel`
+- `seller_type`
+- `transmission`
+- `owner`
+
+encoder는 다음과 같이 구성했습니다.
+
+```python
+OneHotEncoder(
+    handle_unknown="ignore",
+    sparse_output=False,
+)
+```
+
+범주 정보가 test 데이터에서 학습 단계로 유입되지 않도록 encoder는 `X_train_features`의 범주형 변수에서만 `fit`했습니다. `X_test_features`에는 train에서 학습한 동일한 encoder로 `transform`만 적용했습니다.
+
+train에서 학습된 컬럼별 One-Hot feature 수는 다음과 같습니다.
+
+| 원본 컬럼 | One-Hot feature 수 |
+|---|---:|
+| `name_prefix_2` | 200 |
+| `fuel` | 4 |
+| `seller_type` | 3 |
+| `transmission` | 2 |
+| `owner` | 5 |
+| 합계 | 214 |
+
+범주형 변수만 변환한 결과 shape는 다음과 같습니다.
+
+- train categorical encoded: `(5,541, 214)`
+- test categorical encoded: `(1,385, 214)`
+
+이후 수치형 및 결측 indicator 12개와 결합해:
+
+- `X_train_encoded`: `(5,541, 226)`
+- `X_test_encoded`: `(1,385, 226)`
+
+를 구성했습니다.
+
+최종 feature 수는 `226개`이며 object dtype 컬럼과 결측값은 남아 있지 않았습니다. One-Hot 값은 `0.0/1.0`으로 구성되었습니다.
+
+최종 encoded feature의 dtype 구성은 다음과 같습니다.
+
+- `float64`: `224개`
+- `int64`: `2개`
+
+One-Hot feature 214개는 모두 `float64`이며, 이번 단계에서는 dtype을 별도로 변경하지 않았습니다.
+
+train에서는 각 행이 범주형 변수 5개에서 각각 하나의 범주에 해당하므로 전체 One-Hot 행 합이 모두 `5.0`인 것을 확인했습니다.
+
+test의 unseen `name_prefix_2`도 확인했습니다.
+
+- unseen 고유 범주: `10개`
+- unseen test 행: `14행`
+- test 전체 대비: 약 `1.01%`
+- 해당 행의 `name_prefix_2` One-Hot block 합: `0`
+
+`handle_unknown="ignore"`를 사용했기 때문에 train에 없던 `name_prefix_2`가 포함된 test 행도 오류 없이 변환되었으며, 해당 범주의 One-Hot block만 모두 `0.0`으로 유지되었습니다.
+
+test 전체 범주형 One-Hot 행 합 분포는 다음과 같습니다.
+
+| 범주형 One-Hot 행 합 | 행 수 |
+|---:|---:|
+| `5.0` | 1,371 |
+| `4.0` | 14 |
+
+합이 `4.0`인 14행은 unseen `name_prefix_2`가 포함된 행이며, `fuel`, `seller_type`, `transmission`, `owner`의 각 One-Hot block 합은 test의 모든 행에서 `1.0`이었습니다.
+
+기존 `X_train_features`, `X_test_features`, 결측 대체 결과, 원본 split 데이터와 `y_train`, `y_test`는 변경하지 않았습니다. 인코딩 결과는 별도의 `X_train_encoded`, `X_test_encoded`에 구성했습니다.
+
+현재 단계에서는 scaling, target 변환, 모델 학습은 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1841,5 +1920,6 @@ baseline 처리 기준은 다음과 같이 정리했습니다.
 - 범주형 변수 cardinality·unseen 조사 및 저카디널리티 4개 변수 One-Hot Encoding 방향 결정
 - name 1·2·3단어 prefix 비교를 통해 2단어 prefix를 현재 유력 후보로 선정
 - full name 대신 2단어 `name_prefix_2`를 baseline feature로 실제 파생하고 별도 feature DataFrame 구성
+- 범주형 5개 변수를 train 기준 One-Hot Encoding하고 226개 모델 입력 feature 구성
 
-아직 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 scaling 방식 결정 및 적용, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
