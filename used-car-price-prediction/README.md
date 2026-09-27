@@ -1267,6 +1267,23 @@ stratified test의 결측 행 비율은 전체 데이터의 비율과 유사했�
 
 현재 단계에서는 split 방식만 결정했으며 실제 최종 `X_train`, `X_test`, `y_train`, `y_test` 생성, 결측값 대체, 범주형 인코딩, 모델 학습은 아직 수행하지 않았습니다.
 
+##### 모델링용 scikit-learn 환경 추가
+
+train/test split 방식 결정 이후 실제 분할과 모델링용 전처리를 구현하기 위해 프로젝트의 기존 uv 환경에 `scikit-learn`을 dependency로 추가했습니다.
+
+설치 후 확인된 환경은 다음과 같습니다.
+
+- Python: `3.13.15`
+- pandas: `3.0.5`
+- NumPy: `2.5.3`
+- scikit-learn: `1.9.1`
+
+`train_test_split`과 `SimpleImputer`의 import가 정상적으로 동작하는 것도 확인했습니다.
+
+dependency는 일회성 환경 설치로만 남기지 않고 `pyproject.toml`과 `uv.lock`에 기록해 프로젝트 환경을 다시 구성할 수 있도록 했습니다.
+
+이번 단계에서는 라이브러리 설치와 import 검증만 수행했습니다. 실제 train/test split, 결측값 대체, 결측 indicator 생성, 범주형 인코딩, 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1274,6 +1291,7 @@ stratified test의 결측 행 비율은 전체 데이터의 비율과 유사했�
 - Python 3.13.15
 - uv 0.12.9
 - pandas 3.0.5
+- scikit-learn 1.9.1
 - ipykernel
 
 프로젝트 의존성은 저장소 루트의 `pyproject.toml`과 `uv.lock`으로 관리합니다.
@@ -1308,5 +1326,6 @@ stratified test의 결측 행 비율은 전체 데이터의 비율과 유사했�
 - 차량 제원 동시 결측 208행 삭제 vs 유지 전략 비교 후 행 유지 결정
 - 80:20 random train/test split 후보의 target·범주·결측 분포 사전 검증
 - random vs 가격 구간 stratified split 비교 후 80:20 가격 구간 stratified 방식 결정
+- scikit-learn dependency 추가 및 train_test_split·SimpleImputer import 검증
 
 아직 실제 train/test split 생성, mileage·engine·max_power·torque·seats의 결측 대체 방식과 결측 indicator 구현, name 및 범주형 변수 처리, 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
