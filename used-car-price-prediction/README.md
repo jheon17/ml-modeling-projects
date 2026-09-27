@@ -1515,6 +1515,103 @@ test의 결측 행에도 동일한 train 기준값이 적용됐습니다.
 
 현재 단계에서는 차량 제원 결측 대체와 indicator 적용까지만 완료했습니다. `name` 및 범주형 변수 처리, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 아직 수행하지 않았습니다.
 
+##### name 및 범주형 변수 구조 조사
+
+차량 제원 결측 처리 이후 범주형 변수를 실제 인코딩하기 전에 `X_train`을 기준으로 범주의 개수와 분포, test의 unseen category를 조사했습니다.
+
+조사 대상은 다음 5개 컬럼입니다.
+
+- `name`
+- `fuel`
+- `seller_type`
+- `transmission`
+- `owner`
+
+이들 컬럼에는 train과 test 모두 결측값이 없었습니다.
+
+고유 범주 수는 다음과 같았습니다.
+
+| 컬럼 | train | test | 전체 |
+|---|---:|---:|---:|
+| name | 1,859 | 813 | 2,058 |
+| fuel | 4 | 4 | 4 |
+| seller_type | 3 | 3 | 3 |
+| transmission | 2 | 2 | 2 |
+| owner | 5 | 4 | 5 |
+
+`fuel`, `seller_type`, `transmission`, `owner`는 모두 고유 범주 수가 적었으며 test에만 존재하는 unseen category도 확인되지 않았습니다.
+
+따라서 이 네 컬럼은 이후 모델링용 전처리에서 `OneHotEncoder`를 사용하는 방향으로 결정했습니다. 새로운 데이터에서 학습 시점에 없던 범주가 들어오는 경우에도 변환이 중단되지 않도록 `handle_unknown="ignore"`를 사용할 예정입니다.
+
+반면 `name`은 train에서 고유값이 `1,859개`로 train 전체 `5,541행`의 약 `33.55%`에 해당해 범주 수가 많았습니다.
+
+train의 `name` 등장 빈도도 확인했습니다.
+
+| 등장 빈도 | 고유 name 수 | 해당 train 행 | train 비율 |
+|---|---:|---:|---:|
+| 1회 | 926 | 926 | 16.71% |
+| 2회 | 373 | 746 | 13.46% |
+| 3~4회 | 292 | 983 | 17.74% |
+| 5~9회 | 167 | 1,061 | 19.15% |
+| 10회 이상 | 101 | 1,825 | 32.94% |
+
+특히 train에서 한 번만 등장하는 `name`이 `926개`로, full `name`을 그대로 범주형 변수로 사용할 경우 희소한 범주가 많이 생성될 수 있음을 확인했습니다.
+
+test에서도 train에 존재하지 않는 full `name`이 확인됐습니다.
+
+- unseen 고유 name: `199개`
+- unseen name에 해당하는 test 행: `215행`
+- test 전체 대비: 약 `15.52%`
+
+따라서 full `name`을 그대로 one-hot encoding하는 방식은 높은 cardinality와 unseen category를 함께 고려할 필요가 있습니다.
+
+`name`을 단순화할 후보를 살펴보기 위해 첫 번째 단어를 임시 brand proxy로 사용해 조사했습니다. 이 값은 현재 실제 파생 컬럼이나 정제된 제조사 정보가 아니라 `name` 문자열의 첫 단어를 이용한 조사용 값입니다.
+
+첫 단어 기준 결과는 다음과 같았습니다.
+
+- train 고유 brand proxy: `31개`
+- test 고유 brand proxy: `23개`
+- test unseen brand proxy: `1개`
+- unseen 행: `1행`
+- test 전체 대비: 약 `0.07%`
+
+full `name`과 비교하면 다음과 같습니다.
+
+| 항목 | full name | 첫 단어 brand proxy |
+|---|---:|---:|
+| train 고유 범주 | 1,859 | 31 |
+| test 고유 범주 | 813 | 23 |
+| test unseen 고유 범주 | 199 | 1 |
+| test unseen 행 | 215 | 1 |
+| test unseen 행 비율 | 15.52% | 0.07% |
+
+train의 범주 수는 full `name`이 첫 단어 brand proxy보다 약 `60배` 많았습니다.
+
+다만 첫 단어만 사용하면 세부 차종·트림 정보가 크게 합쳐질 수 있습니다. 예를 들어 train에서 브랜드별 고유 `name` 수는 Maruti `353개`, Hyundai `287개`, Mahindra `227개`, Tata `212개` 등으로 확인됐습니다.
+
+따라서 첫 단어로 축약하면 cardinality와 unseen 문제는 크게 줄지만 차량의 세부 모델 정보를 상당 부분 잃을 가능성도 있습니다.
+
+`name`의 문자열 길이도 공백 기준 단어 수로 확인했으며:
+
+- 최소: `3개`
+- 중앙값: `5개`
+- 평균: 약 `4.71개`
+- 최대: `10개`
+
+였습니다.
+
+현재 단계에서는 다음과 같이 정리했습니다.
+
+- `fuel`: One-Hot Encoding 방향
+- `seller_type`: One-Hot Encoding 방향
+- `transmission`: One-Hot Encoding 방향
+- `owner`: One-Hot Encoding 방향
+- 위 네 변수는 `handle_unknown="ignore"` 사용 예정
+- full `name`: 높은 cardinality와 test unseen 비율 때문에 처리 방법 추가 검토 필요
+- 첫 단어 brand proxy: cardinality와 unseen은 크게 줄지만 세부 정보 손실 가능성이 있어 아직 실제 적용하지 않음
+
+`OneHotEncoder(handle_unknown="ignore")` 객체가 정상 생성되는 것은 확인했지만 아직 `fit`, `transform`, 실제 범주형 인코딩은 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -1561,5 +1658,6 @@ test의 결측 행에도 동일한 train 기준값이 적용됐습니다.
 - 가격 구간 기반 stratified train/test split 실제 생성 및 재현성 검증
 - train 분포 검토 후 연속형 차량 제원 median·seats 최빈값 결측 대체 및 indicator 활용 방식 결정
 - train 기준 차량 제원 결측 대체 및 5개 결측 indicator 실제 적용·검증
+- 범주형 변수 cardinality·unseen 조사 및 저카디널리티 4개 변수 One-Hot Encoding 방향 결정
 
-아직 name 및 범주형 변수 처리, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
+아직 name 처리 방식 확정, 범주형 변수 실제 인코딩, scaling, 최종 모델링용 전처리 파이프라인 구성, EDA, 모델 학습은 진행하지 않았습니다.
