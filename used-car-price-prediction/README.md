@@ -1950,6 +1950,55 @@ scaled feature에는 train/test 모두 결측값이 없었습니다.
 
 현재 단계에서는 scaling까지 완료했으며 target 변환, feature selection, 모델 학습은 아직 수행하지 않았습니다.
 
+##### DummyRegressor median baseline
+
+실제 학습 모델의 성능을 비교하기 위한 최소 기준선을 만들기 위해 `DummyRegressor(strategy="median")`을 사용했습니다.
+
+Dummy 모델은 feature와 target의 관계를 학습하지 않고 train target의 중앙값을 모든 행에 동일하게 예측합니다.
+
+이번 baseline에서는 scaling되지 않은 다음 입력을 사용했습니다.
+
+- `X_train_encoded`: `(5,541, 226)`
+- `X_test_encoded`: `(1,385, 226)`
+
+DummyRegressor는 feature의 값이나 scale을 이용해 관계를 학습하지 않기 때문에 `X_train_scaled`, `X_test_scaled`는 사용하지 않았습니다.
+
+모델은 train 데이터에서만 fit했습니다.
+
+train target의 중앙값과 실제 Dummy 예측 상수는 모두 다음과 같았습니다.
+
+- train target median: `405,000`
+- Dummy prediction: `405,000`
+- 두 값 일치: `True`
+
+train과 test 모두 모든 행에 동일한 `405,000`을 예측했으며 prediction의 결측값은 없었습니다.
+
+baseline 성능은 다음과 같습니다.
+
+| model | split | MAE | RMSE | R² |
+|---|---|---:|---:|---:|
+| DummyMedian | train | 278,295.50 | 540,017.24 | -0.0458 |
+| DummyMedian | test | 276,028.53 | 497,127.94 | -0.0508 |
+
+train과 test 모두 RMSE가 MAE보다 큰 것을 확인했습니다.
+
+`R²`의 기준이 평균 예측이기 때문에 중앙값 상수 예측인 이번 DummyRegressor에서는 음수 R²가 나올 수 있으며, 이를 실행 오류로 판단하지 않았습니다.
+
+test 예측 오차는 `actual - prediction`으로 계산했습니다.
+
+- 평균 error: `109,295.60`
+- 중앙값 error: `-5,000`
+- 최소 error: `-374,000`
+- 최대 error: `5,395,000`
+- 절대오차 중앙값: `188,000`
+- 절대오차 90% quantile: `495,000`
+
+중앙값 하나만 예측하는 방식이기 때문에 고가 차량에서는 큰 과소예측이 발생할 수 있음을 확인했습니다. 다만 이 결과는 Dummy 모델의 성능을 개선하기 위한 분석이 아니라 이후 실제 회귀 모델과 비교하기 위한 baseline으로 사용합니다.
+
+기존 `X_train_encoded`, `X_test_encoded`, `X_train_scaled`, `X_test_scaled`, `y_train`, `y_test`는 변경하지 않았으며 feature와 target의 index 정렬도 유지했습니다.
+
+현재 단계에서는 Dummy baseline까지만 학습했으며 Ridge, LinearRegression, RandomForest 등 실제 feature-target 관계를 학습하는 회귀 모델은 아직 실행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2001,5 +2050,6 @@ scaled feature에는 train/test 모두 결측값이 없었습니다.
 - full name 대신 2단어 `name_prefix_2`를 baseline feature로 실제 파생하고 별도 feature DataFrame 구성
 - 범주형 5개 변수를 train 기준 One-Hot Encoding하고 226개 모델 입력 feature 구성
 - 수치형 7개 feature에 train 기준 StandardScaler를 적용한 별도 scaled 모델 입력 구성
+- DummyRegressor median baseline 학습 및 test MAE·RMSE·R² 기준선 확보
 
-아직 최종 모델링용 전처리 구조 정리, EDA, baseline 모델 학습 및 성능 평가는 진행하지 않았습니다.
+아직 실제 회귀 baseline 모델 학습·비교, EDA 확장, hyperparameter tuning 및 최종 성능 평가는 진행하지 않았습니다.
