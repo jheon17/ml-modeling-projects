@@ -2074,6 +2074,124 @@ absolute coefficient가 큰 feature에는 일부 고가 차량 prefix와 범주�
 
 현재 단계에서는 `Ridge(alpha=1.0)` 하나만 baseline으로 실행했으며 다른 alpha 비교, Cross Validation, hyperparameter tuning, target 변환, 다른 회귀 모델 학습은 아직 수행하지 않았습니다.
 
+##### RandomForest 첫 트리 기반 baseline
+
+선형 관계를 학습하는 Ridge와 다른 유형의 모델을 비교하기 위해 첫 트리 기반 baseline으로 `RandomForestRegressor`를 적용했습니다.
+
+이번 baseline에서는 다음과 같이 고정된 설정 한 번만 사용했습니다.
+
+- `n_estimators=100`
+- `max_depth=None`
+- `min_samples_split=2`
+- `min_samples_leaf=1`
+- `max_features=1.0`
+- `bootstrap=True`
+- `random_state=42`
+- `n_jobs=-1`
+
+test 결과를 확인한 뒤 parameter를 변경하거나 추가 RandomForest를 학습하지 않았습니다.
+
+RandomForest는 결정트리 기반 모델이므로 이번 baseline에서는 StandardScaler를 적용하지 않은 encoded 입력을 사용했습니다.
+
+- `X_train_encoded`: `(5,541, 226)`
+- `X_test_encoded`: `(1,385, 226)`
+
+모델은 train 데이터에서만 fit했습니다.
+
+학습 결과:
+
+- tree 개수: `100`
+- feature importance 개수: `226`
+- feature importance NaN/inf: `0`
+- feature importance 합계: `1.0`
+
+예측값은 다음과 같았습니다.
+
+| 항목 | train | test |
+|---|---:|---:|
+| 음수 가격 예측 | 0 | 0 |
+| 최소 예측값 | 38,825.99 | 40,831.98 |
+| 중앙값 예측 | 412,027.73 | 417,769.97 |
+| 평균 예측 | 517,740.94 | 510,540.31 |
+| 최대 예측값 | 8,381,100.00 | 5,125,466.67 |
+
+RandomForest에서는 이번 실행에서 음수 가격 예측이 발생하지 않았습니다. 다만 이를 모델이 현실적인 가격 제약을 명시적으로 학습한 결과라고 해석하지 않았습니다.
+
+세 baseline의 성능은 다음과 같습니다.
+
+| model | split | MAE | RMSE | R² |
+|---|---|---:|---:|---:|
+| DummyMedian | train | 278,295.50 | 540,017.24 | -0.0458 |
+| DummyMedian | test | 276,028.53 | 497,127.94 | -0.0508 |
+| Ridge | train | 112,641.25 | 190,521.50 | 0.8698 |
+| Ridge | test | 117,733.99 | 216,340.68 | 0.8010 |
+| RandomForest | train | 29,914.84 | 60,905.70 | 0.9867 |
+| RandomForest | test | 77,409.56 | 148,753.08 | 0.9059 |
+
+현재 고정된 test split에서 RandomForest는 Ridge 대비 다음과 같은 변화를 보였습니다.
+
+- MAE 감소량: `40,324.43`
+- MAE 감소율: 약 `34.25%`
+- RMSE 감소량: `67,587.60`
+- RMSE 감소율: 약 `31.24%`
+- R² 증가: 약 `0.1049`
+
+DummyMedian test 대비:
+
+- MAE 감소량: `198,618.97`
+- MAE 감소율: 약 `71.96%`
+- RMSE 감소량: `348,374.86`
+- RMSE 감소율: 약 `70.08%`
+- R² 증가: 약 `0.9567`
+
+현재 split에서는 RandomForest가 DummyMedian과 Ridge보다 낮은 MAE·RMSE와 높은 R²를 기록했습니다.
+
+다만 이를 근거로 RandomForest를 최종 모델 또는 최적 모델이라고 결정하지 않았습니다.
+
+train-test 성능 차이는 다음과 같았습니다.
+
+| 지표 | Ridge | RandomForest |
+|---|---:|---:|
+| test MAE − train MAE | 5,092.74 | 47,494.72 |
+| test RMSE − train RMSE | 25,819.18 | 87,847.38 |
+| train R² − test R² | 0.0688 | 0.0808 |
+
+RandomForest의 train-test gap이 Ridge보다 크게 나타났지만, 현재 한 번의 train/test split 결과만으로 과적합 여부를 확정하지 않았습니다. 이후 train 데이터 내부 검증 과정에서 추가 확인이 필요합니다.
+
+test 오차는 `actual - prediction` 기준으로 다음과 같았습니다.
+
+| 통계 | DummyMedian | Ridge | RandomForest |
+|---|---:|---:|---:|
+| 평균 error | 109,295.60 | -524.00 | 3,755.29 |
+| 중앙값 error | -5,000.00 | -9,111.08 | -878.50 |
+| 최소 error | -374,000.00 | -1,041,977.87 | -1,157,409.98 |
+| 최대 error | 5,395,000.00 | 3,367,318.02 | 1,843,105.02 |
+| 절대오차 중앙값 | 188,000.00 | 75,619.79 | 44,950.88 |
+| 절대오차 90% quantile | 495,000.00 | 232,999.59 | 153,880.67 |
+
+RandomForest의 절대오차 중앙값과 90% quantile은 현재 split에서 Ridge보다 낮았습니다. 다만 일부 차량에서는 여전히 큰 오차가 존재했습니다.
+
+RandomForest의 impurity-based feature importance 상위 변수에는 다음이 포함됐습니다.
+
+- `max_power`: `0.417579`
+- `torque`: `0.244982`
+- `year`: `0.202083`
+- `km_driven`: `0.040840`
+- `mileage`: `0.018563`
+- `engine`: `0.007315`
+
+상위 3개인 `max_power`, `torque`, `year`의 importance 합은 약 `0.8646`이었습니다.
+
+이는 해당 RandomForest 모델이 분할 과정에서 이 변수들을 상대적으로 많이 활용했다는 모델 내부 결과입니다. 인과효과, 사업적 중요도 또는 가격 결정 요인의 비중으로 해석하지 않았습니다.
+
+또한 impurity-based importance는 변수 특성 및 서로 관련된 feature의 영향을 받을 수 있으므로 절대적인 feature importance라고 판단하지 않았습니다.
+
+Ridge coefficient와 RandomForest feature importance는 계산 방식과 의미가 다르므로 두 값의 크기를 직접 비교하지 않았습니다.
+
+기존 `X_train_encoded`, `X_test_encoded`, `X_train_scaled`, `X_test_scaled`, `y_train`, `y_test`는 변경하지 않았으며 feature와 target의 index 정렬도 유지했습니다.
+
+이번 단계에서는 고정된 RandomForest baseline 한 번만 실행했으며 parameter 변경, Cross Validation, hyperparameter tuning, target 변환, feature selection 및 다른 트리·boosting 모델 학습은 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2127,5 +2245,6 @@ absolute coefficient가 큰 feature에는 일부 고가 차량 prefix와 범주�
 - 수치형 7개 feature에 train 기준 StandardScaler를 적용한 별도 scaled 모델 입력 구성
 - DummyRegressor median baseline 학습 및 test MAE·RMSE·R² 기준선 확보
 - Ridge(alpha=1.0) 첫 실제 회귀 baseline 학습 및 Dummy 대비 test 오차 개선 확인
+- RandomForest 첫 트리 기반 baseline 학습 및 Ridge 대비 test MAE·RMSE 개선 확인
 
-아직 트리 기반 baseline 모델 비교, EDA 확장, Cross Validation·hyperparameter tuning 및 최종 성능 평가는 진행하지 않았습니다.
+아직 train 데이터 내부 Cross Validation, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 현재 test split은 baseline 비교에 이미 사용했으며, 이후 모델 선택과 tuning은 train 데이터 내부 검증을 기준으로 진행할 예정입니다.
