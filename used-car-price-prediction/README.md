@@ -1999,6 +1999,81 @@ test 예측 오차는 `actual - prediction`으로 계산했습니다.
 
 현재 단계에서는 Dummy baseline까지만 학습했으며 Ridge, LinearRegression, RandomForest 등 실제 feature-target 관계를 학습하는 회귀 모델은 아직 실행하지 않았습니다.
 
+##### Ridge 첫 회귀 baseline
+
+Dummy baseline 이후 처음으로 실제 feature-target 관계를 학습하는 모델로 `Ridge(alpha=1.0)`을 적용했습니다.
+
+Ridge는 coefficient에 L2 규제를 적용하므로 feature scale의 영향을 받을 수 있습니다. 따라서 연속·수치형 7개에 train 기준 `StandardScaler`를 적용한 다음 입력을 사용했습니다.
+
+- `X_train_scaled`: `(5,541, 226)`
+- `X_test_scaled`: `(1,385, 226)`
+
+모델은 train 데이터에서만 fit했으며 test 데이터는 성능 평가에만 사용했습니다.
+
+학습된 coefficient는 총 `226개`였으며 NaN 또는 inf 값은 없었습니다.
+
+Ridge 예측 결과는 다음과 같습니다.
+
+| 항목 | train | test |
+|---|---:|---:|
+| 음수 가격 예측 | 215 | 58 |
+| 최소 예측값 | -735,582.78 | -499,281.14 |
+| 중앙값 예측 | 451,345.27 | 452,090.82 |
+| 평균 예측 | 518,014.31 | 514,819.59 |
+| 최대 예측값 | 6,942,715.16 | 4,703,744.83 |
+
+음수 가격 예측은 이번 baseline에서는 임의로 0으로 보정하거나 제거하지 않고 모델의 실제 출력 그대로 평가했습니다.
+
+DummyMedian과 Ridge의 성능은 다음과 같습니다.
+
+| model | split | MAE | RMSE | R² |
+|---|---|---:|---:|---:|
+| DummyMedian | train | 278,295.50 | 540,017.24 | -0.0458 |
+| DummyMedian | test | 276,028.53 | 497,127.94 | -0.0508 |
+| Ridge | train | 112,641.25 | 190,521.50 | 0.8698 |
+| Ridge | test | 117,733.99 | 216,340.68 | 0.8010 |
+
+test 기준 Dummy 대비 Ridge의 변화는 다음과 같습니다.
+
+- MAE 감소량: `158,294.54`
+- MAE 감소율: 약 `57.35%`
+- RMSE 감소량: `280,787.26`
+- RMSE 감소율: 약 `56.48%`
+- R² 변화: `+0.8518`
+
+따라서 현재 train/test split에서는 차량 feature를 실제로 학습한 Ridge가 feature를 사용하지 않는 Dummy median baseline보다 MAE와 RMSE를 크게 낮추고 R²도 개선한 것을 확인했습니다.
+
+이는 현재 전처리된 feature가 가격 예측에 활용 가능한 정보를 포함하고 있다는 첫 모델링 근거입니다. 다만 Ridge가 최종적으로 가장 좋은 모델이라는 의미는 아니며, 다른 모델과의 비교는 아직 수행하지 않았습니다.
+
+Ridge의 train-test 성능 차이는 다음과 같았습니다.
+
+- test MAE − train MAE: `5,092.74`
+- test RMSE − train RMSE: `25,819.18`
+- train R² − test R²: `0.0688`
+
+이번 단계에서는 이 차이를 확인만 했으며 과적합 여부를 확정하지 않았습니다.
+
+test 오차는 `actual - prediction` 기준으로 다음과 같았습니다.
+
+- 평균 error: `-524.00`
+- 중앙값 error: `-9,111.08`
+- 최소 error: `-1,041,977.87`
+- 최대 error: `3,367,318.02`
+- 절대오차 중앙값: `75,619.79`
+- 절대오차 90% quantile: `232,999.59`
+
+Dummy baseline의 절대오차 중앙값 `188,000`, 90% quantile `495,000`과 비교하면 Ridge에서 두 지표 모두 감소했습니다.
+
+다만 일부 차량에서는 여전히 큰 예측 오차가 존재하며, 특히 최대 실제값 대비 과소예측 사례도 남아 있습니다.
+
+absolute coefficient가 큰 feature에는 일부 고가 차량 prefix와 범주형 feature가 포함됐습니다. 예를 들어 `name_prefix_2_Volvo XC90`, `name_prefix_2_BMW X4`, `name_prefix_2_Mercedes-Benz S-Class` 등이 상대적으로 큰 coefficient를 보였습니다.
+
+이 coefficient들은 Ridge 모델이 부여한 선형 가중치이며 feature importance나 인과효과로 해석하지 않았습니다. 또한 연속형 7개는 표준화됐지만 indicator와 One-Hot feature는 `0/1` 형태이므로 모든 coefficient를 완전히 동일한 의미의 단위로 직접 비교하지 않았습니다.
+
+기존 `X_train_scaled`, `X_test_scaled`, `X_train_encoded`, `X_test_encoded`, `y_train`, `y_test`는 변경하지 않았으며 feature와 target의 index 정렬도 유지했습니다.
+
+현재 단계에서는 `Ridge(alpha=1.0)` 하나만 baseline으로 실행했으며 다른 alpha 비교, Cross Validation, hyperparameter tuning, target 변환, 다른 회귀 모델 학습은 아직 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2051,5 +2126,6 @@ test 예측 오차는 `actual - prediction`으로 계산했습니다.
 - 범주형 5개 변수를 train 기준 One-Hot Encoding하고 226개 모델 입력 feature 구성
 - 수치형 7개 feature에 train 기준 StandardScaler를 적용한 별도 scaled 모델 입력 구성
 - DummyRegressor median baseline 학습 및 test MAE·RMSE·R² 기준선 확보
+- Ridge(alpha=1.0) 첫 실제 회귀 baseline 학습 및 Dummy 대비 test 오차 개선 확인
 
-아직 실제 회귀 baseline 모델 학습·비교, EDA 확장, hyperparameter tuning 및 최종 성능 평가는 진행하지 않았습니다.
+아직 트리 기반 baseline 모델 비교, EDA 확장, Cross Validation·hyperparameter tuning 및 최종 성능 평가는 진행하지 않았습니다.
