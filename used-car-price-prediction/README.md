@@ -2271,6 +2271,106 @@ validation target의 평균, 표준편차와 왜도는 fold별로 차이가 있�
 
 이번 단계에서는 모델 학습, CV score 계산, Pipeline·ColumnTransformer 구현, hyperparameter tuning을 수행하지 않았습니다.
 
+##### Pipeline·ColumnTransformer 기반 전처리 재구성
+
+향후 Cross Validation에서 각 fold의 training 데이터에만 전처리를 fit하기 위해, 기존에 수동으로 수행했던 전처리 과정을 scikit-learn `Pipeline`과 `ColumnTransformer` 구조로 다시 구성했습니다.
+
+이번 단계에서는 모델 학습이나 Cross Validation score 계산을 수행하지 않고, 새 전처리 구조가 기존 수동 전처리 결과를 동일하게 재현하는지만 검증했습니다.
+
+공통 전처리의 첫 단계에서는 원본 `name`에서 앞의 두 단어를 결합한 `name_prefix_2`를 생성하고 full `name` 컬럼은 제외했습니다.
+
+RandomForest용 전처리는 다음과 같이 구성했습니다.
+
+- `year`, `km_driven`: 그대로 사용
+- `mileage`, `engine`, `max_power`, `torque`: train 기준 median imputation
+- `seats`: train 기준 most frequent imputation
+- 차량 제원 5개의 missing indicator: 별도 branch로 유지
+- `name_prefix_2`, `fuel`, `seller_type`, `transmission`, `owner`: `OneHotEncoder(handle_unknown="ignore")`
+- StandardScaler: 사용하지 않음
+
+전체 `X_train`에 fit하고 train/test를 transform한 결과:
+
+- train shape: `(5,541, 226)`
+- test shape: `(1,385, 226)`
+- 결측값: `0`
+- object dtype 컬럼: `0`
+
+기존 수동 결과인 `X_train_encoded`, `X_test_encoded`와 비교했을 때:
+
+- 컬럼 이름 동일: `True`
+- 컬럼 순서 동일: `True`
+- index 동일: `True`
+- train 최대 absolute difference: `0.0`
+- test 최대 absolute difference: `0.0`
+- train/test 평균 absolute difference: `0.0`
+- `1e-10`보다 큰 차이가 발생한 cell: train/test 모두 `0`
+
+따라서 현재 전체 train 기준에서는 Pipeline/ColumnTransformer 기반 RandomForest 전처리가 기존 수동 encoded 결과를 동일하게 재현하는 것을 확인했습니다.
+
+Pipeline 내부 imputer가 train에서 학습한 값도 기존 수동 전처리와 일치했습니다.
+
+- `mileage` median: `19.4`
+- `engine` median: `1,248`
+- `max_power` median: `81.83`
+- `torque` median: `160`
+- `seats` most frequent: `5`
+
+One-Hot Encoding에서 train 기준으로 학습된 category 수 역시 기존 결과와 일치했습니다.
+
+- `name_prefix_2`: `200`
+- `fuel`: `4`
+- `seller_type`: `3`
+- `transmission`: `2`
+- `owner`: `5`
+- 총 One-Hot feature: `214`
+
+test에는 train에서 보지 못한 `name_prefix_2`가 고유값 기준 `10개`, 총 `14행` 있었으며 전체 test의 약 `1.01%`였습니다.
+
+`handle_unknown="ignore"`에 따라 해당 14행의 `name_prefix_2` One-Hot block 합은 모두 `0`이었습니다.
+
+Ridge용 전처리는 동일한 결측 처리와 범주형 인코딩 구조를 사용하되 다음 7개 실제 수치형 feature에만 `StandardScaler`를 적용했습니다.
+
+- `year`
+- `km_driven`
+- `mileage`
+- `engine`
+- `max_power`
+- `torque`
+- `seats`
+
+missing indicator 5개와 One-Hot feature 214개에는 StandardScaler를 적용하지 않았습니다.
+
+전체 `X_train`에 fit하고 train/test를 transform한 결과:
+
+- train shape: `(5,541, 226)`
+- test shape: `(1,385, 226)`
+- 결측값: `0`
+- object dtype 컬럼: `0`
+
+기존 수동 결과인 `X_train_scaled`, `X_test_scaled`와 비교했을 때:
+
+- 컬럼 이름 동일: `True`
+- 컬럼 순서 동일: `True`
+- index 동일: `True`
+- train 최대 absolute difference: `0.0`
+- test 최대 absolute difference: `0.0`
+- train/test 평균 absolute difference: `0.0`
+- `1e-10`보다 큰 차이가 발생한 cell: train/test 모두 `0`
+
+따라서 현재 전체 train 기준에서는 Ridge용 Pipeline 전처리도 기존 수동 scaled 결과를 동일하게 재현하는 것을 확인했습니다.
+
+StandardScaler를 적용한 7개 feature는 train에서 평균이 0에 가까웠고 population standard deviation(`ddof=0`)은 모두 `1.0`이었습니다.
+
+missing indicator와 One-Hot feature는 이진값을 유지했으며 StandardScaler를 통과하지 않았습니다.
+
+기존 `X_train`, `X_test`, encoded/scaled 입력과 `y_train`, `y_test`는 변경하지 않았습니다.
+
+기존 수동 전처리는 전체 train에 fit하고 test에 transform하는 단일 train/test baseline용 구조였습니다. 새 Pipeline/ColumnTransformer 구조는 동일한 전처리 과정을 하나의 sklearn 객체 안에 묶어, 이후 5-Fold Cross Validation에서 각 fold의 training 부분에만 전처리를 fit할 수 있도록 준비한 구조입니다.
+
+이번 단계에서는 아직 실제 Cross Validation을 실행하지 않았으므로 fold 단위에서 전처리 fit/transform이 동작했다거나 CV leakage가 실제 실행으로 검증됐다고 주장하지 않습니다.
+
+모델 학습, CV score 계산, hyperparameter tuning, target 변환 및 feature selection도 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2326,5 +2426,6 @@ validation target의 평균, 표준편차와 왜도는 fold별로 차이가 있�
 - Ridge(alpha=1.0) 첫 실제 회귀 baseline 학습 및 Dummy 대비 test 오차 개선 확인
 - RandomForest 첫 트리 기반 baseline 학습 및 Ridge 대비 test MAE·RMSE 개선 확인
 - train 내부 5-Fold KFold 분할의 coverage·재현성·target 분포 검증 및 CV 기준 확정
+- 기존 수동 전처리를 Pipeline·ColumnTransformer로 재구성하고 encoded/scaled 결과와 값 단위 동일성 검증
 
-아직 fold 내부 전처리 Pipeline 구성, Ridge·RandomForest Cross Validation 성능 평가, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 선택과 tuning은 고정 test split이 아니라 train 내부 5-Fold Cross Validation을 기준으로 진행할 예정입니다.
+아직 Pipeline과 Ridge·RandomForest를 연결한 5-Fold Cross Validation 성능 평가, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 선택과 tuning은 고정 test split이 아니라 train 내부 5-Fold Cross Validation을 기준으로 진행할 예정입니다.
