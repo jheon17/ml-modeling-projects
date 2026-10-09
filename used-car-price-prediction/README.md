@@ -2371,6 +2371,150 @@ missing indicator와 One-Hot feature는 이진값을 유지했으며 StandardSca
 
 모델 학습, CV score 계산, hyperparameter tuning, target 변환 및 feature selection도 수행하지 않았습니다.
 
+##### Pipeline 기반 Ridge·RandomForest 5-Fold Cross Validation
+
+고정 test split을 이후 모델 선택에 반복해서 사용하지 않기 위해, 전처리 이전 `X_train`, `y_train`만 사용해 Pipeline 기반 5-Fold Cross Validation을 실행했습니다.
+
+사용한 CV 설정은 이전에 검증한 다음 구조와 동일합니다.
+
+- `KFold`
+- `n_splits=5`
+- `shuffle=True`
+- `random_state=42`
+- 입력: `X_train`, `y_train` only
+- test 데이터: 모델 fit·score·선택에 미사용
+
+각 fold에서는 해당 fold의 training subset에서만 imputer, One-Hot Encoder, StandardScaler 등 필요한 전처리를 fit하고 validation subset에는 transform만 적용했습니다.
+
+비교한 baseline 모델은 다음 두 개입니다.
+
+- `Ridge(alpha=1.0)`
+- `RandomForestRegressor`
+  - `n_estimators=100`
+  - `max_depth=None`
+  - `min_samples_split=2`
+  - `min_samples_leaf=1`
+  - `max_features=1.0`
+  - `bootstrap=True`
+  - `random_state=42`
+
+이번 단계에서는 parameter를 변경하거나 tuning하지 않았습니다.
+
+Ridge의 fold별 결과는 다음과 같았습니다.
+
+| fold | train MAE | validation MAE | train RMSE | validation RMSE | train R² | validation R² |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 115,557.31 | 120,232.63 | 196,111.21 | 196,521.61 | 0.8723 | 0.7951 |
+| 2 | 113,231.50 | 131,420.39 | 192,861.53 | 244,811.08 | 0.8611 | 0.8144 |
+| 3 | 110,703.27 | 123,690.25 | 184,330.44 | 295,611.35 | 0.8744 | 0.7186 |
+| 4 | 112,009.21 | 123,118.45 | 190,501.93 | 253,723.92 | 0.8644 | 0.8012 |
+| 5 | 115,098.49 | 123,570.59 | 188,542.54 | 236,551.05 | 0.8761 | 0.7731 |
+
+RandomForest의 fold별 결과는 다음과 같았습니다.
+
+| fold | train MAE | validation MAE | train RMSE | validation RMSE | train R² | validation R² |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 30,547.73 | 75,086.18 | 65,671.72 | 141,601.85 | 0.9857 | 0.8936 |
+| 2 | 30,118.75 | 82,987.23 | 66,431.32 | 185,516.58 | 0.9835 | 0.8934 |
+| 3 | 30,187.23 | 83,188.78 | 60,743.43 | 209,741.85 | 0.9864 | 0.8583 |
+| 4 | 30,321.78 | 74,248.97 | 69,650.05 | 135,213.02 | 0.9819 | 0.9435 |
+| 5 | 29,967.56 | 76,778.29 | 63,273.64 | 152,410.23 | 0.9860 | 0.9058 |
+
+validation 성능의 평균과 표준편차(`ddof=0`)는 다음과 같았습니다.
+
+| model | MAE mean | MAE std | RMSE mean | RMSE std | R² mean | R² std |
+|---|---:|---:|---:|---:|---:|---:|
+| Ridge | 124,406.47 | 3,727.91 | 245,443.80 | 31,806.31 | 0.7805 | 0.0337 |
+| RandomForest | 78,457.89 | 3,867.84 | 164,896.70 | 28,340.61 | 0.8989 | 0.0274 |
+
+validation 평균 기준 RandomForest는 Ridge 대비 다음과 같은 차이를 보였습니다.
+
+- MAE 감소량: `45,948.58`
+- MAE 감소율: 약 `36.93%`
+- RMSE 감소량: `80,547.10`
+- RMSE 감소율: 약 `32.82%`
+- R² 증가: 약 `0.1185`
+
+5개 개별 validation fold에서도 RandomForest는 모두 Ridge보다 낮은 MAE·RMSE와 높은 R²를 기록했습니다.
+
+따라서 현재 고정된 5-Fold 구조와 baseline 설정에서는 RandomForest가 단일 test split뿐 아니라 train 내부 Cross Validation에서도 Ridge보다 일관되게 나은 validation 성능을 보였습니다.
+
+다만 이 결과만으로 RandomForest를 최종 모델 또는 최적 모델이라고 결정하지 않았습니다.
+
+validation 성능 범위는 다음과 같았습니다.
+
+| model | MAE range | RMSE range | R² range |
+|---|---:|---:|---:|
+| Ridge | 120,232.63 ~ 131,420.39 | 196,521.61 ~ 295,611.35 | 0.7186 ~ 0.8144 |
+| RandomForest | 74,248.97 ~ 83,188.78 | 135,213.02 ~ 209,741.85 | 0.8583 ~ 0.9435 |
+
+모델별 train-validation gap 평균과 표준편차(`ddof=0`)는 다음과 같았습니다.
+
+| model | MAE gap | RMSE gap | R² gap |
+|---|---:|---:|---:|
+| Ridge | 11,086.51 ± 4,516.52 | 54,974.27 ± 35,421.32 | 0.0892 ± 0.0381 |
+| RandomForest | 48,229.28 ± 3,960.79 | 99,742.67 ± 30,489.48 | 0.0857 ± 0.0287 |
+
+RandomForest의 MAE·RMSE train-validation gap이 Ridge보다 크게 나타났으며 train 성능도 매우 높았습니다. 이는 모델 복잡도와 일반화 차이를 이후 tuning 과정에서 추가로 확인할 필요가 있다는 신호로 보았지만, 현재 결과만으로 과적합 여부를 확정하지 않았습니다.
+
+`return_estimator=True`로 각 fold의 fitted Pipeline도 확인했습니다.
+
+각 fold training subset에서 학습된 imputer 값은 다음과 같았습니다.
+
+| fold | mileage median | engine median | max_power median | torque median | seats mode |
+|---|---:|---:|---:|---:|---:|
+| 1 | 19.30 | 1,248 | 81.86 | 160 | 5 |
+| 2 | 19.62 | 1,248 | 81.86 | 160 | 5 |
+| 3 | 19.61 | 1,248 | 81.83 | 160 | 5 |
+| 4 | 19.40 | 1,248 | 81.86 | 160 | 5 |
+| 5 | 19.40 | 1,248 | 81.83 | 160 | 5 |
+
+Ridge와 RandomForest는 동일한 fold training subset을 사용했기 때문에 각 fold의 imputer 학습값도 동일했습니다.
+
+전체 train 기준 mileage median `19.4`와 달리 일부 fold에서 `19.30`, `19.62`, `19.61` 등이 학습된 것은 각 fold의 training subset에서 전처리가 다시 fit됐기 때문입니다.
+
+One-Hot Encoding 결과도 fold training 데이터에 따라 달라졌습니다.
+
+| fold | name_prefix_2 categories | 총 One-Hot feature | 전체 output feature |
+|---|---:|---:|---:|
+| 1 | 192 | 206 | 218 |
+| 2 | 193 | 207 | 219 |
+| 3 | 194 | 208 | 220 |
+| 4 | 193 | 207 | 219 |
+| 5 | 192 | 206 | 218 |
+
+`fuel=4`, `seller_type=3`, `transmission=2`, `owner=5` 범주는 모든 fold training에서 유지됐으며, 희소성이 높은 `name_prefix_2`의 category 수만 fold별로 달라졌습니다.
+
+전체 train에 fit했을 때의 output feature `226개`보다 각 fold의 feature 수가 적은 것은 일부 희소한 `name_prefix_2` 범주가 해당 fold training subset에 존재하지 않았기 때문입니다.
+
+각 validation fold에는 해당 fold의 training subset에서 보지 못한 `name_prefix_2`도 존재했습니다.
+
+| fold | unseen unique categories | unseen validation rows |
+|---|---:|---:|
+| 1 | 8 | 8 |
+| 2 | 7 | 7 |
+| 3 | 6 | 6 |
+| 4 | 7 | 8 |
+| 5 | 8 | 10 |
+
+모든 unseen 행에서 `name_prefix_2` One-Hot block 합은 `0`이었으며 `handle_unknown="ignore"`를 통해 transform 오류 없이 처리됐습니다.
+
+Ridge와 RandomForest의 모든 fold에서 validation transform이 정상 수행됐고 다음을 확인했습니다.
+
+- validation 행 수와 index 유지
+- 해당 fold에서 학습된 feature 수와 transform 결과 feature 수 일치
+- 결측값 `0`
+- object dtype 컬럼 `0`
+- validation에 `fit` 또는 `fit_transform`을 별도로 수행하지 않음
+
+따라서 이번 실행에서는 전체 train 기준 encoded/scaled 결과를 CV 입력으로 직접 사용하지 않고, 각 fold의 training subset에서 전처리를 다시 fit한 뒤 validation에는 transform만 적용하는 Pipeline 기반 CV 구조가 실제로 동작함을 확인했습니다.
+
+이번 Cross Validation에서는 `X_test`, `y_test`, `X_test_encoded`, `X_test_scaled`를 모델 fit·score·선택에 사용하지 않았습니다.
+
+기존 train/test 데이터와 encoded/scaled 데이터, 기존 전처리 Pipeline 객체도 변경하지 않았습니다.
+
+이번 단계에서는 Ridge alpha 변경, RandomForest parameter 변경, GridSearchCV·RandomizedSearchCV 등 hyperparameter tuning, target 변환, feature selection 및 추가 모델 학습을 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2427,5 +2571,6 @@ missing indicator와 One-Hot feature는 이진값을 유지했으며 StandardSca
 - RandomForest 첫 트리 기반 baseline 학습 및 Ridge 대비 test MAE·RMSE 개선 확인
 - train 내부 5-Fold KFold 분할의 coverage·재현성·target 분포 검증 및 CV 기준 확정
 - 기존 수동 전처리를 Pipeline·ColumnTransformer로 재구성하고 encoded/scaled 결과와 값 단위 동일성 검증
+- Pipeline 기반 Ridge·RandomForest 5-Fold CV 실행 및 RandomForest의 fold별 validation 성능 우위 확인
 
-아직 Pipeline과 Ridge·RandomForest를 연결한 5-Fold Cross Validation 성능 평가, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 선택과 tuning은 고정 test split이 아니라 train 내부 5-Fold Cross Validation을 기준으로 진행할 예정입니다.
+아직 RandomForest hyperparameter tuning, tuning 결과의 Cross Validation 재평가, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 및 parameter 선택은 고정 test split이 아니라 train 내부 5-Fold Cross Validation 결과를 기준으로 진행할 예정입니다.
