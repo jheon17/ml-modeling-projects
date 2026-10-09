@@ -2192,6 +2192,85 @@ Ridge coefficient와 RandomForest feature importance는 계산 방식과 의미�
 
 이번 단계에서는 고정된 RandomForest baseline 한 번만 실행했으며 parameter 변경, Cross Validation, hyperparameter tuning, target 변환, feature selection 및 다른 트리·boosting 모델 학습은 수행하지 않았습니다.
 
+##### Train 내부 5-Fold Cross Validation 구조 검증
+
+baseline 비교에 사용한 고정 test split을 이후 모델 선택과 tuning에 반복해서 사용하지 않기 위해, train 데이터 내부 Cross Validation 구조를 먼저 검증했습니다.
+
+이번 단계에서는 모델을 학습하지 않고 전처리 이전의 다음 데이터만 사용했습니다.
+
+- `X_train`: `(5,541, 12)`
+- `y_train`: `(5,541,)`
+- X/y index 정렬: `True`
+
+Cross Validation 후보는 다음과 같이 고정했습니다.
+
+- `KFold`
+- `n_splits=5`
+- `shuffle=True`
+- `random_state=42`
+
+각 fold의 크기는 다음과 같았습니다.
+
+| fold | train rows | validation rows |
+|---|---:|---:|
+| 1 | 4,432 | 1,109 |
+| 2 | 4,433 | 1,108 |
+| 3 | 4,433 | 1,108 |
+| 4 | 4,433 | 1,108 |
+| 5 | 4,433 | 1,108 |
+
+5개 validation fold를 합친 결과:
+
+- 전체 train 행 수: `5,541`
+- validation index 전체 개수: `5,541`
+- validation unique index 개수: `5,541`
+- 누락 index: `0`
+- 2번 이상 validation에 포함된 index: `0`
+- 모든 행이 정확히 한 번씩 validation에 포함: `True`
+- 각 fold 내부 train/validation overlap: `0`
+
+동일한 `KFold(n_splits=5, shuffle=True, random_state=42)`를 다시 생성했을 때 5개 fold의 분할 위치가 모두 동일해 재현성도 확인했습니다.
+
+전체 train의 가격 구간 분포는 다음과 같았습니다.
+
+| 가격 구간 | count | proportion |
+|---|---:|---:|
+| 0~199,999 | 950 | 17.1449% |
+| 200,000~399,999 | 1,690 | 30.4999% |
+| 400,000~599,999 | 1,268 | 22.8840% |
+| 600,000~999,999 | 1,220 | 22.0177% |
+| 1,000,000 이상 | 413 | 7.4535% |
+
+각 validation fold와 전체 train의 가격 구간 비율을 비교했을 때 fold별 최대 절대 차이는 다음과 같았습니다.
+
+- Fold 1: `1.4623%p`
+- Fold 2: `1.0775%p`
+- Fold 3: `2.4313%p`
+- Fold 4: `1.5303%p`
+- Fold 5: `2.0813%p`
+
+전체 5개 fold 중 가장 큰 차이는 Fold 3의 `2.4313%p`였습니다.
+
+고가 차량도 모든 validation fold에 포함됐습니다.
+
+| 그룹 | 전체 train | Fold 1 | Fold 2 | Fold 3 | Fold 4 | Fold 5 |
+|---|---:|---:|---:|---:|---:|---:|
+| 1,000,000 이상 | 413 | 69 | 85 | 98 | 87 | 74 |
+| 2,000,000 이상 | 95 | 14 | 25 | 17 | 22 | 17 |
+| 3,000,000 이상 | 44 | 6 | 11 | 8 | 9 | 10 |
+
+validation target의 평균, 표준편차와 왜도는 fold별로 차이가 있었으며, 최대 가격 `10,000,000`인 관측치는 Fold 3 validation에 포함됐습니다.
+
+현재 분포 차이와 고가 차량 분산 상태를 확인한 결과, 별도의 가격 구간 기반 stratified fold로 변경하지 않고 현재 5-Fold KFold를 이후 train 내부 검증의 기준으로 사용하기로 했습니다.
+
+다만 fold별 target 분포가 완전히 동일한 것은 아니므로 이후 CV에서는 단일 평균 성능뿐 아니라 fold별 결과와 성능 변동도 함께 확인합니다.
+
+또한 기존 `X_train_encoded`, `X_train_scaled`는 전체 `X_train`을 기준으로 imputer, encoder, scaler가 이미 fit된 결과이므로 향후 엄밀한 Cross Validation 입력으로 직접 사용하지 않습니다.
+
+이후 CV에서는 전처리 이전 `X_train`을 기준으로 각 fold의 training 부분에서만 필요한 전처리를 fit하고 validation 부분에는 transform만 적용하도록 Pipeline 구조를 구성할 예정입니다.
+
+이번 단계에서는 모델 학습, CV score 계산, Pipeline·ColumnTransformer 구현, hyperparameter tuning을 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2246,5 +2325,6 @@ Ridge coefficient와 RandomForest feature importance는 계산 방식과 의미�
 - DummyRegressor median baseline 학습 및 test MAE·RMSE·R² 기준선 확보
 - Ridge(alpha=1.0) 첫 실제 회귀 baseline 학습 및 Dummy 대비 test 오차 개선 확인
 - RandomForest 첫 트리 기반 baseline 학습 및 Ridge 대비 test MAE·RMSE 개선 확인
+- train 내부 5-Fold KFold 분할의 coverage·재현성·target 분포 검증 및 CV 기준 확정
 
-아직 train 데이터 내부 Cross Validation, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 현재 test split은 baseline 비교에 이미 사용했으며, 이후 모델 선택과 tuning은 train 데이터 내부 검증을 기준으로 진행할 예정입니다.
+아직 fold 내부 전처리 Pipeline 구성, Ridge·RandomForest Cross Validation 성능 평가, RandomForest hyperparameter tuning, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 선택과 tuning은 고정 test split이 아니라 train 내부 5-Fold Cross Validation을 기준으로 진행할 예정입니다.
