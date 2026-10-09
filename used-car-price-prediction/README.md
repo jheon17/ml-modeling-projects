@@ -2515,6 +2515,104 @@ Ridge와 RandomForest의 모든 fold에서 validation transform이 정상 수행
 
 이번 단계에서는 Ridge alpha 변경, RandomForest parameter 변경, GridSearchCV·RandomizedSearchCV 등 hyperparameter tuning, target 변환, feature selection 및 추가 모델 학습을 수행하지 않았습니다.
 
+##### RandomForest 첫 hyperparameter tuning 범위 설계
+
+Pipeline 기반 5-Fold Cross Validation에서 RandomForest가 Ridge보다 높은 validation 성능을 보였지만, RandomForest의 train MAE·RMSE와 validation MAE·RMSE 사이의 차이도 크게 나타났습니다.
+
+따라서 첫 hyperparameter tuning에서는 모델을 더 복잡하게 만드는 것보다 트리 복잡도와 split마다 사용하는 feature 범위를 조절하는 parameter를 중심으로 탐색 범위를 설계했습니다.
+
+기존 RandomForest baseline 설정은 다음과 같습니다.
+
+- `n_estimators=100`
+- `max_depth=None`
+- `min_samples_split=2`
+- `min_samples_leaf=1`
+- `max_features=1.0`
+- `bootstrap=True`
+- `random_state=42`
+- `n_jobs=-1`
+
+첫 tuning 대상은 다음 세 parameter로 제한했습니다.
+
+| parameter | baseline | candidate values | 역할 |
+|---|---:|---|---|
+| `max_depth` | `None` | `None`, `10`, `20` | 개별 tree의 최대 깊이 제한 |
+| `min_samples_leaf` | `1` | `1`, `2`, `4` | 하나의 leaf에 필요한 최소 학습 행 수 |
+| `max_features` | `1.0` | `1.0`, `0.7`, `0.5` | 각 split에서 후보로 검토할 feature 비율 |
+
+`max_depth`를 작게 제한하면 tree 복잡도를 줄일 수 있지만 너무 작으면 충분한 패턴을 학습하지 못할 수 있습니다.
+
+`min_samples_leaf`를 높이면 매우 적은 행만 포함하는 leaf 생성을 제한할 수 있지만, 너무 크게 설정하면 세밀한 패턴을 놓칠 수 있습니다.
+
+`max_features`를 낮추면 각 tree가 서로 다른 feature를 사용할 가능성이 커질 수 있지만, 유용한 feature가 특정 split의 후보에서 제외될 수도 있습니다.
+
+이번 첫 tuning에서는 다음 parameter를 baseline과 동일하게 고정하기로 했습니다.
+
+- `n_estimators=100`
+- `min_samples_split=2`
+- `bootstrap=True`
+- `random_state=42`
+- `n_jobs=-1`
+
+따라서 첫 탐색은 tree 수가 아니라 `max_depth`, `min_samples_leaf`, `max_features` 변화에 집중합니다.
+
+탐색 공간은 다음과 같습니다.
+
+- `max_depth`: 3개
+- `min_samples_leaf`: 3개
+- `max_features`: 3개
+- 전체 조합: `27개`
+
+기존에 확정한 5-Fold Cross Validation을 그대로 사용할 경우 예상 candidate-fold evaluation 수는:
+
+`27 × 5 = 135회`
+
+입니다.
+
+이는 GridSearch 실행 시 예상되는 기본 CV 평가 규모이며, 이번 설계 단계에서는 실제 model fit이나 GridSearch를 실행하지 않았습니다.
+
+기존 baseline 조합:
+
+- `max_depth=None`
+- `min_samples_leaf=1`
+- `max_features=1.0`
+
+도 27개 후보 안에 포함했습니다.
+
+따라서 향후 동일한 5-Fold CV 안에서 baseline과 tuning 후보를 직접 비교할 수 있습니다.
+
+27개 후보를 실제 조합으로 생성해 확인한 결과:
+
+- 전체 후보: `27개`
+- unique 조합: `27개`
+- 중복 조합: `0`
+- baseline 포함: `True`
+
+향후 parameter 선택 정책은 다음과 같이 정했습니다.
+
+1. 1차 기준: validation MAE 평균
+2. 2차 기준: validation RMSE 평균
+3. 보조 확인: validation R², fold별 성능 변동, train-validation gap
+
+MAE를 1차 기준으로 선택한 이유는 중고차 가격 예측에서 평균적으로 실제 가격에서 얼마나 벗어나는지를 원래 가격 단위로 직접 해석할 수 있기 때문입니다.
+
+향후 실제 GridSearch에서는 여러 metric을 함께 계산하되 MAE를 주 선택 기준으로 사용할 예정입니다. RMSE와 R²는 후보의 오차 특성과 일반화 양상을 보조적으로 확인하는 데 사용합니다.
+
+Cross Validation은 기존에 검증한 다음 설정을 그대로 유지할 예정입니다.
+
+- `KFold(n_splits=5, shuffle=True, random_state=42)`
+
+parameter 선택에는 고정 test split을 사용하지 않습니다.
+
+다음 데이터는 tuning parameter 선택에 사용하지 않을 예정입니다.
+
+- `X_test`
+- `y_test`
+- `X_test_encoded`
+- `X_test_scaled`
+
+이번 단계에서는 GridSearchCV·RandomizedSearchCV 생성 및 실행, model fit, CV score 계산, 최적 parameter 선택, target 변환, feature selection을 수행하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2572,5 +2670,6 @@ Ridge와 RandomForest의 모든 fold에서 validation transform이 정상 수행
 - train 내부 5-Fold KFold 분할의 coverage·재현성·target 분포 검증 및 CV 기준 확정
 - 기존 수동 전처리를 Pipeline·ColumnTransformer로 재구성하고 encoded/scaled 결과와 값 단위 동일성 검증
 - Pipeline 기반 Ridge·RandomForest 5-Fold CV 실행 및 RandomForest의 fold별 validation 성능 우위 확인
+- RandomForest 첫 tuning 대상 3개 parameter와 27개 후보 조합 설계 및 baseline 포함 여부 검증
 
-아직 RandomForest hyperparameter tuning, tuning 결과의 Cross Validation 재평가, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 이후 모델 및 parameter 선택은 고정 test split이 아니라 train 내부 5-Fold Cross Validation 결과를 기준으로 진행할 예정입니다.
+아직 RandomForest 27개 후보의 5-Fold GridSearchCV 실행, 최적 parameter 선택 및 tuning 결과 재평가, 추가 모델 비교와 EDA 확장은 진행하지 않았습니다. parameter 선택은 고정 test split이 아니라 train 내부 5-Fold Cross Validation의 validation MAE 평균을 1차 기준으로 진행할 예정입니다.
