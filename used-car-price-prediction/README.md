@@ -3015,6 +3015,151 @@ RMSE가 가장 많이 개선된 구간은 `600,000~999,999`로 `5,020.49` 감소
 
 이번 error analysis 결과를 이용해 parameter를 변경하거나 다른 후보를 test에서 평가하지 않았습니다.
 
+##### 100만 이상 차량 extreme-error 집중도 분석
+
+앞선 가격 구간별 error analysis에서 `1,000,000 이상` 차량은 고정 test의 `7.44%`인 `103행`이었지만 tuned RandomForest 전체 squared error의 `67.39%`를 차지했습니다.
+
+이 고가 구간의 RMSE 악화가 차량 전체에 넓게 퍼진 현상인지, 일부 extreme-error 차량에 집중된 현상인지 확인하기 위해 개별 test 행 수준에서 squared error 분포를 추가 분석했습니다.
+
+분석 대상은 실제 `selling_price >= 1,000,000`인 `103행`이며 원본 test index 중복은 `0`이었습니다.
+
+Tuned RandomForest의 squared error가 가장 큰 상위 차량은 다음과 같았습니다.
+
+| rank | test index | vehicle | actual price | tuned prediction | tuned absolute error |
+|---|---:|---|---:|---:|---:|
+| 1 | 3456 | Volkswagen Multivan TDI | 2,150,000 | 246,996.57 | 1,903,003.43 |
+| 2 | 132 | Lexus ES 300h | 5,150,000 | 3,370,494.65 | 1,779,505.35 |
+| 3 | 3248 | Mercedes-Benz GL-Class 350 CDI Luxury | 4,090,000 | 2,457,700.00 | 1,632,300.00 |
+| 4 | 1057 | BMW X6 xDrive30d | 3,750,000 | 2,260,949.97 | 1,489,050.03 |
+| 5 | 1978 | Honda Civic ZX Diesel BSIV | 2,125,000 | 1,189,588.86 | 935,411.14 |
+| 6 | 4671 | BMW 5 Series 520d Luxury Line | 5,200,000 | 4,288,733.33 | 911,266.67 |
+| 7 | 7343 | BMW X4 M Sport X xDrive20d | 5,800,000 | 5,005,236.67 | 794,763.33 |
+| 8 | 3604 | Hyundai Santa Fe 2WD MT | 1,100,000 | 1,827,439.96 | 727,439.96 |
+| 9 | 3110 | Audi A4 35 TDI Premium Plus | 1,750,000 | 2,443,739.75 | 693,739.75 |
+| 10 | 5710 | BMW 7 Series 730Ld | 2,000,000 | 1,311,000.00 | 689,000.00 |
+
+차량명 자체를 error의 원인으로 해석하지 않았으며, 위 표는 현재 tuned model에서 squared error가 큰 test 행을 확인하기 위한 용도로만 사용했습니다.
+
+고가 segment 내부의 squared error 집중도는 다음과 같았습니다.
+
+| Top K | Baseline | Tuned |
+|---|---:|---:|
+| Top 1 | 17.39% | 16.86% |
+| Top 3 | 42.00% | 44.01% |
+| Top 5 | 56.53% | 58.41% |
+| Top 10 | 69.40% | 72.14% |
+
+Tuned model에서는 고가 차량 상위 10행이 해당 구간 squared error의 `72.14%`를 차지했습니다.
+
+고가 segment squared error의 일정 비율을 만드는 데 필요한 최소 행 수도 확인했습니다.
+
+| model | 25% | 50% | 75% |
+|---|---:|---:|---:|
+| Baseline | 2행 | 4행 | 13행 |
+| Tuned | 2행 | 4행 | 12행 |
+
+즉 tuned model에서는 `103행` 중 상위 `4행`만으로 고가 segment squared error의 절반 이상, 상위 `12행`으로 75% 이상을 차지했습니다.
+
+고가 차량의 extreme error는 전체 test squared error에서도 큰 비중을 차지했습니다.
+
+| Top K | Baseline 전체 test | Tuned 전체 test |
+|---|---:|---:|
+| Top 1 | 11.08% | 11.36% |
+| Top 3 | 26.77% | 29.66% |
+| Top 5 | 36.03% | 39.37% |
+| Top 10 | 44.23% | 48.61% |
+
+따라서 tuned 고가 차량 squared error 상위 10행만으로 전체 tuned test squared error의 `48.61%`를 차지했습니다.
+
+Baseline 대비 tuned model에서 squared error가 가장 많이 증가한 행도 별도로 확인했습니다.
+
+| rank | test index | vehicle | actual price | squared error increase |
+|---|---:|---|---:|---:|
+| 1 | 132 | Lexus ES 300h | 5,150,000 | 약 891.88 billion |
+| 2 | 3248 | Mercedes-Benz GL-Class 350 CDI Luxury | 4,090,000 | 약 502.03 billion |
+| 3 | 1978 | Honda Civic ZX Diesel BSIV | 2,125,000 | 약 346.36 billion |
+| 4 | 4671 | BMW 5 Series 520d Luxury Line | 5,200,000 | 약 298.65 billion |
+| 5 | 134 | Jeep Wrangler 2016-2019 3.6 4X4 | 4,100,000 | 약 224.79 billion |
+| 6 | 3456 | Volkswagen Multivan TDI | 2,150,000 | 약 224.39 billion |
+| 7 | 7343 | BMW X4 M Sport X xDrive20d | 5,800,000 | 약 176.65 billion |
+| 8 | 7931 | Ford Endeavour 2.2 Titanium AT 4X2 | 2,100,000 | 약 156.90 billion |
+| 9 | 362 | Mercedes-Benz New C-Class 220 CDI AT | 1,550,000 | 약 92.39 billion |
+| 10 | 57 | Audi A6 2.0 TDI Technology | 1,750,000 | 약 72.29 billion |
+
+반대로 tuned model에서 squared error가 크게 감소한 차량도 존재했습니다.
+
+가장 큰 감소 사례에는 Ford Endeavour 3.2 Titanium AT 4X4, BMW X6 xDrive30d, BMW 3 Series 320d Prestige 등이 포함됐습니다.
+
+따라서 tuning이 고가 차량 전체를 한 방향으로 악화시킨 것은 아니었습니다.
+
+고가 `103행` 중 baseline과 비교해 tuned model의 squared error가:
+
+- 증가: `64행` (`62.14%`)
+- 감소: `39행` (`37.86%`)
+- 동일: `0행`
+
+이었습니다.
+
+Absolute error 기준으로도 동일한 행 수가 확인됐습니다.
+
+즉 고가 구간에서 오차 악화가 일부 소수 차량에서만 발생한 것은 아니며 절반을 넘는 행에서 오차가 증가했습니다.
+
+다만 squared error 증가의 크기는 소수 차량에 강하게 집중돼 있었습니다.
+
+Baseline 대비 squared error가 증가한 행만 모아 증가분을 계산했을 때:
+
+- Top 1: positive squared-error 증가분의 `23.86%`
+- Top 3: `46.55%`
+- Top 5: `60.56%`
+- Top 10: `79.89%`
+
+를 차지했습니다.
+
+Squared error 변화량을 증가와 감소로 분리하면:
+
+- positive 증가 합: `3,738,250,084,021.61`
+- negative 개선분 절댓값 합: `1,795,658,036,746.31`
+- net 증가: `1,942,592,047,275.31`
+
+이었습니다.
+
+`positive 증가 - 개선분 = net 증가`와 고가 segment 전체 tuned squared error와 baseline squared error 차이를 비교한 결과 부동소수점 수준의 차이만 발생해 계산 구조도 재검증했습니다.
+
+Baseline과 tuned model 각각의 squared error 상위 10개 행을 비교했을 때 `9개`가 겹쳤습니다.
+
+공통 test index는:
+
+`132, 1057, 1978, 3248, 3456, 3604, 4671, 5710, 7343`
+
+이었습니다.
+
+따라서 tuning 이후 완전히 새로운 extreme-error 차량군이 형성됐다기보다, 두 모델 모두에서 이미 큰 오차를 보이던 차량 상당수가 공통적으로 존재하고 그 오차 크기가 tuning 후 달라진 패턴이 관찰됐습니다.
+
+앞선 분석에서 고가 segment의 absolute error 90% quantile은:
+
+- Baseline: `667,231.98`
+- Tuned: `640,061.51`
+
+로 감소했지만 RMSE는:
+
+- Baseline: `435,482.64`
+- Tuned: `456,623.75`
+
+로 증가했습니다.
+
+이번 분석에서:
+
+- tuned squared error 상위 10행이 고가 segment squared error의 `72.14%`
+- positive squared-error 증가분 상위 10행이 전체 증가분의 `79.89%`
+
+를 차지했습니다.
+
+따라서 q90 absolute error는 감소했지만 RMSE가 증가한 현상은 일부 extreme 행에 squared-error 증가가 집중된 관찰 패턴과 일치했습니다.
+
+다만 이번 분석은 고정 test에서 수행한 관찰적 error analysis이며, 특정 차량·브랜드·feature 또는 RandomForest parameter가 extreme error의 인과적 원인이라고 판단하지 않았습니다.
+
+또한 이 분석 결과를 이용해 parameter를 변경하거나 prediction을 보정하거나 다른 tuning 후보를 test에서 평가하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -3076,5 +3221,6 @@ RMSE가 가장 많이 개선된 구간은 `600,000~999,999`로 `5,020.49` 감소
 - RandomForest 27개 후보를 5-Fold GridSearchCV로 평가하고 MAE 기준 best 조합 및 baseline 대비 약 1.50% 개선 확인
 - GridSearch best RandomForest를 고정 test에서 재평가하고 MAE는 약 0.78% 개선됐지만 RMSE·R²는 악화됨을 확인
 - 고정 test 가격 구간별 error analysis를 통해 100만 이상 차량 7.44%가 tuned squared error의 67.39%를 차지하는 패턴 확인
+- 100만 이상 차량 extreme-error 분석에서 tuned squared-error 증가분 상위 10행이 전체 증가분의 79.89%를 차지하는 집중 패턴 확인
 
-RandomForest 첫 tuning과 고정 test 재평가, 실제 판매가격 구간별 error analysis까지 완료했습니다. tuned model은 대부분의 가격 구간에서 MAE가 감소했지만 100만 이상 구간에서는 MAE·RMSE가 모두 증가했고, 해당 103행이 tuned squared error의 67.39%를 차지했습니다. 아직 개별 extreme error 차량 분석, 연식·주행거리 등 추가 segment 분석, 추가 모델 비교 및 EDA 확장은 진행하지 않았으며, error analysis 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
+RandomForest 첫 tuning과 고정 test 재평가, 가격 구간별 error analysis, 100만 이상 차량 extreme-error 집중도 분석까지 완료했습니다. 고가 차량에서는 tuned model의 squared error가 103행 중 64행에서 증가했지만, 증가분의 79.89%가 상위 10행에 집중됐습니다. 아직 연식·주행거리 등 추가 segment 분석, 추가 모델 비교 및 최종 프로젝트 요약 정리는 진행하지 않았으며, error analysis 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
