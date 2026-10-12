@@ -2613,6 +2613,173 @@ parameter 선택에는 고정 test split을 사용하지 않습니다.
 
 이번 단계에서는 GridSearchCV·RandomizedSearchCV 생성 및 실행, model fit, CV score 계산, 최적 parameter 선택, target 변환, feature selection을 수행하지 않았습니다.
 
+##### RandomForest 27개 후보 5-Fold GridSearchCV 결과
+
+사전에 설계한 `max_depth`, `min_samples_leaf`, `max_features`의 27개 조합을 기존 train 내부 5-Fold Cross Validation에서 `GridSearchCV`로 평가했습니다.
+
+GridSearch 설정은 다음과 같습니다.
+
+- 후보 조합: `27개`
+- Cross Validation: `KFold(n_splits=5, shuffle=True, random_state=42)`
+- candidate-fold evaluation: `27 × 5 = 135`
+- scoring:
+  - MAE
+  - RMSE
+  - R²
+- `refit="mae"`
+- parameter 선택 기준: validation MAE 평균
+- test 데이터: fit·scoring·parameter 선택에 미사용
+
+`27 × 5 = 135`는 candidate-fold CV evaluation 수이며, `refit="mae"`에 따라 best candidate가 선택된 뒤 해당 설정의 estimator가 전체 `X_train`, `y_train`에 한 번 다시 fit됐습니다.
+
+MAE 기준 best parameter는 다음과 같았습니다.
+
+- `max_depth=20`
+- `min_samples_leaf=1`
+- `max_features=0.5`
+- MAE rank: `1`
+
+`n_estimators=100`, `min_samples_split=2`, `bootstrap=True`, `random_state=42`, `n_jobs=-1`은 기존 baseline과 동일하게 유지했습니다.
+
+Best candidate의 5-Fold validation 성능은 다음과 같았습니다.
+
+| metric | mean | std (`ddof=0`) |
+|---|---:|---:|
+| MAE | 77,281.45 | 4,353.85 |
+| RMSE | 162,632.33 | 27,972.60 |
+| R² | 0.901760 | 0.026204 |
+
+기존 baseline 조합:
+
+- `max_depth=None`
+- `min_samples_leaf=1`
+- `max_features=1.0`
+
+은 GridSearch 내 MAE rank `10`이었으며 다음 결과를 기록했습니다.
+
+| metric | mean | std (`ddof=0`) |
+|---|---:|---:|
+| MAE | 78,457.89 | 3,867.84 |
+| RMSE | 164,896.70 | 28,340.61 |
+| R² | 0.898948 | 0.027368 |
+
+동일한 5-Fold CV 기준으로 best candidate와 baseline을 비교한 결과:
+
+- MAE 감소: `1,176.44`
+- MAE 감소율: 약 `1.50%`
+- RMSE 감소: `2,264.37`
+- RMSE 감소율: 약 `1.37%`
+- R² 증가: `0.002812`
+
+따라서 이번 탐색 범위 안에서는 tuning candidate가 baseline보다 validation MAE를 실제로 낮췄습니다.
+
+다만 개선 폭은 MAE 기준 약 `1.50%`로 크지 않았으므로, tuning으로 큰 폭의 성능 향상을 얻었다고 해석하지 않았습니다.
+
+또한 MAE 기준 상위 두 후보는 다음과 같았습니다.
+
+| rank | max_depth | min_samples_leaf | max_features | validation MAE mean |
+|---|---:|---:|---:|---:|
+| 1 | 20 | 1 | 0.5 | 77,281.45 |
+| 2 | None | 1 | 0.7 | 77,300.52 |
+
+두 후보의 validation MAE 평균 차이는 약 `19.07`에 불과했습니다.
+
+따라서 현재 GridSearch에서는 `max_depth=20`, `min_samples_leaf=1`, `max_features=0.5`가 MAE 기준 1위였지만, 이 조합이 다른 상위 후보보다 압도적으로 우월하거나 유일한 최적 해라고 해석하지 않았습니다.
+
+MAE 기준 상위 10개 후보는 다음과 같았습니다.
+
+| rank | max_depth | min_samples_leaf | max_features | validation MAE mean | validation MAE std | validation RMSE mean | validation R² mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 20 | 1 | 0.5 | 77,281.45 | 4,353.85 | 162,632.33 | 0.901760 |
+| 2 | None | 1 | 0.7 | 77,300.52 | 4,171.94 | 162,720.74 | 0.901775 |
+| 3 | 20 | 1 | 0.7 | 77,458.81 | 4,059.98 | 162,863.66 | 0.901331 |
+| 4 | None | 2 | 0.7 | 77,759.23 | 4,873.16 | 162,912.07 | 0.900830 |
+| 5 | 20 | 2 | 0.5 | 77,896.86 | 4,877.69 | 163,289.66 | 0.900891 |
+| 6 | None | 1 | 0.5 | 77,917.04 | 4,524.63 | 164,581.28 | 0.899568 |
+| 7 | None | 2 | 0.5 | 77,929.64 | 4,784.41 | 163,657.59 | 0.900451 |
+| 8 | 20 | 1 | 1.0 | 78,120.10 | 3,784.55 | 165,349.32 | 0.898207 |
+| 9 | 20 | 2 | 0.7 | 78,218.68 | 4,698.64 | 164,218.67 | 0.899351 |
+| 10 | None | 1 | 1.0 | 78,457.89 | 3,867.84 | 164,896.70 | 0.898948 |
+
+Best candidate의 fold별 train·validation 결과는 다음과 같았습니다.
+
+| fold | train MAE | validation MAE | train RMSE | validation RMSE | train R² | validation R² |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 32,668.51 | 72,687.08 | 68,972.50 | 136,215.55 | 0.984209 | 0.901541 |
+| 2 | 31,772.23 | 82,164.77 | 67,239.13 | 182,544.44 | 0.983118 | 0.896832 |
+| 3 | 31,647.84 | 81,972.06 | 61,277.78 | 205,649.63 | 0.986124 | 0.863803 |
+| 4 | 32,181.21 | 72,014.54 | 69,899.07 | 132,109.85 | 0.981742 | 0.946107 |
+| 5 | 31,725.55 | 77,568.81 | 62,686.31 | 156,642.20 | 0.986301 | 0.900519 |
+
+Best와 baseline의 train-validation gap은 다음과 같았습니다.
+
+| candidate | MAE gap mean/std | RMSE gap mean/std | R² gap mean/std |
+|---|---:|---:|---:|
+| Best | 45,282.39 / 4,674.37 | 96,617.38 / 30,605.48 | 0.082538 / 0.027594 |
+| Baseline | 48,229.28 / 3,960.79 | 99,742.67 / 30,489.48 | 0.085749 / 0.028728 |
+
+Best candidate의 평균 gap은 baseline보다:
+
+- MAE gap: `2,946.89` 작음
+- RMSE gap: `3,125.29` 작음
+- R² gap: 약 `0.003210` 작음
+
+으로 나타났습니다.
+
+다만 train-validation gap은 parameter 선택의 주 기준으로 사용하지 않았으며, validation MAE 평균을 1차 기준으로 유지했습니다.
+
+parameter별 candidate 결과를 단순 집계한 validation MAE 범위와 평균은 다음과 같았습니다.
+
+| parameter | value | minimum MAE | maximum MAE | mean MAE |
+|---|---|---:|---:|---:|
+| `max_depth` | None | 77,300.52 | 80,823.43 | 78,847.96 |
+| `max_depth` | 10 | 81,314.45 | 84,169.13 | 82,493.07 |
+| `max_depth` | 20 | 77,281.45 | 81,225.08 | 78,893.16 |
+| `min_samples_leaf` | 1 | 77,281.45 | 82,209.85 | 79,051.25 |
+| `min_samples_leaf` | 2 | 77,759.23 | 82,328.05 | 79,488.17 |
+| `min_samples_leaf` | 4 | 80,059.41 | 84,169.13 | 81,694.77 |
+| `max_features` | 1.0 | 78,120.10 | 83,776.99 | 80,406.28 |
+| `max_features` | 0.7 | 77,300.52 | 83,542.73 | 79,745.77 |
+| `max_features` | 0.5 | 77,281.45 | 84,169.13 | 80,082.13 |
+
+이 값들은 다른 parameter와 조합된 27개 탐색 결과를 parameter 값별로 단순 집계한 것이므로, 개별 parameter의 독립적 인과효과로 해석하지 않았습니다.
+
+GridSearch 내부 baseline 후보와 이전에 별도로 실행한 RandomForest baseline 5-Fold CV를 비교한 결과:
+
+- MAE 차이: `0.0`
+- RMSE 차이: `0.0`
+- R² 차이: `0.0`
+- 일치 여부: `True`
+
+였습니다.
+
+따라서 동일한 Pipeline, RandomForest parameter와 CV split이 GridSearch 내부에서도 기존 baseline 결과를 그대로 재현했음을 확인했습니다.
+
+또한:
+
+- `best_params_`와 validation MAE 기준 rank 1 parameter 일치: `True`
+- best candidate의 fold별 값으로 직접 계산한 mean/std와 GridSearch 집계값 차이: `0.0`
+- GridSearch candidate 수: `27`
+- unique parameter 조합: `27`
+- duplicate 조합: `0`
+- 기존 baseline 후보 포함: `True`
+
+를 확인했습니다.
+
+`refit="mae"`에 따라 `best_estimator_`는 선택된 parameter로 전체 `X_train`, `y_train`에 다시 fit된 상태이며:
+
+- Pipeline: `preprocessing → model`
+- fitted RandomForest tree 수: `100`
+- best parameter 일치: `True`
+
+를 확인했습니다.
+
+이번 단계에서는 `best_estimator_`를 `X_test`에 적용하거나 test MAE·RMSE·R²를 계산하지 않았습니다.
+
+`X_test`, `y_test`, `X_test_encoded`, `X_test_scaled`는 GridSearch의 fit, scoring 및 parameter 선택에 사용하지 않았습니다.
+
+기존 train/test 데이터와 encoded/scaled 데이터, 기존 RandomForest CV Pipeline, preprocessing Pipeline, tuning parameter grid도 변경하지 않았습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2671,5 +2838,6 @@ parameter 선택에는 고정 test split을 사용하지 않습니다.
 - 기존 수동 전처리를 Pipeline·ColumnTransformer로 재구성하고 encoded/scaled 결과와 값 단위 동일성 검증
 - Pipeline 기반 Ridge·RandomForest 5-Fold CV 실행 및 RandomForest의 fold별 validation 성능 우위 확인
 - RandomForest 첫 tuning 대상 3개 parameter와 27개 후보 조합 설계 및 baseline 포함 여부 검증
+- RandomForest 27개 후보를 5-Fold GridSearchCV로 평가하고 MAE 기준 best 조합 및 baseline 대비 약 1.50% 개선 확인
 
-아직 RandomForest 27개 후보의 5-Fold GridSearchCV 실행, 최적 parameter 선택 및 tuning 결과 재평가, 추가 모델 비교와 EDA 확장은 진행하지 않았습니다. parameter 선택은 고정 test split이 아니라 train 내부 5-Fold Cross Validation의 validation MAE 평균을 1차 기준으로 진행할 예정입니다.
+아직 GridSearch에서 선택된 RandomForest best estimator의 고정 test split 재평가, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 현재 best parameter는 train 내부 5-Fold validation MAE 기준으로 선택됐으며, 고정 test split은 parameter 선택에 사용하지 않았습니다.
