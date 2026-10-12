@@ -2780,6 +2780,119 @@ GridSearch 내부 baseline 후보와 이전에 별도로 실행한 RandomForest 
 
 기존 train/test 데이터와 encoded/scaled 데이터, 기존 RandomForest CV Pipeline, preprocessing Pipeline, tuning parameter grid도 변경하지 않았습니다.
 
+##### GridSearch best RandomForest 고정 test 재평가
+
+train 내부 5-Fold GridSearchCV에서 validation MAE 기준으로 선택한 RandomForest best estimator를 기존 고정 test split에 적용해 재평가했습니다.
+
+선택된 parameter는 다음과 같습니다.
+
+- `max_depth=20`
+- `min_samples_leaf=1`
+- `max_features=0.5`
+- `n_estimators=100`
+- `min_samples_split=2`
+- `bootstrap=True`
+- `random_state=42`
+
+이 parameter는 test 결과를 보기 전에 train 내부 Cross Validation의 validation MAE 평균을 기준으로 선택했습니다.
+
+기존 실행 kernel이 종료되어 fitted GridSearch 객체가 메모리에 남아 있지 않았기 때문에, repository 원본을 수정하지 않는 임시 Notebook에서 동일한 코드를 다시 실행해 GridSearch 상태를 복원했습니다.
+
+재실행 결과:
+
+- best parameter 일치: `True`
+- CV MAE: `77,281.451535`
+- CV RMSE: `162,632.332946`
+- CV R²: `0.901760`
+
+으로 기존 GridSearch 결과가 재현되는 것을 확인한 뒤, 해당 best estimator를 고정 test에 한 번 적용했습니다.
+
+Tuned RandomForest의 test 성능은 다음과 같았습니다.
+
+| model | MAE | RMSE | R² |
+|---|---:|---:|---:|
+| RandomForest baseline | 77,409.56 | 148,753.08 | 0.905917 |
+| Tuned RandomForest | 76,806.01 | 151,686.88 | 0.902169 |
+
+baseline 대비 tuned model의 변화는 다음과 같았습니다.
+
+- MAE: `603.55` 감소
+- MAE 변화율: 약 `0.78%` 개선
+- RMSE: `2,933.80` 증가
+- RMSE 변화율: 약 `1.97%` 악화
+- R²: `0.003748` 감소
+
+따라서 tuning 전에 1차 parameter 선택 기준으로 정한 MAE에서는 고정 test에서도 소폭 개선이 확인됐습니다.
+
+반면 RMSE와 R²는 baseline보다 악화됐습니다.
+
+이는 이번 tuning 결과가 모든 평가 지표에서 일관되게 개선된 것은 아니라는 의미입니다. 특히 RMSE는 큰 오차에 더 큰 영향을 받기 때문에, 평균적인 절대오차가 감소하더라도 일부 큰 오차가 커지면 MAE와 RMSE의 변화 방향이 달라질 수 있습니다.
+
+5-Fold CV에서 baseline 대비 tuned model의 변화는:
+
+- MAE: 약 `1.50%` 감소
+- RMSE: 약 `1.37%` 감소
+- R²: `0.002812` 증가
+
+였지만, 고정 test에서는:
+
+- MAE: 약 `0.78%` 감소
+- RMSE: 약 `1.97%` 증가
+- R²: `0.003748` 감소
+
+로 나타났습니다.
+
+즉:
+
+- MAE: CV와 test가 같은 개선 방향
+- RMSE: CV와 test의 방향이 다름
+- R²: CV와 test의 방향이 다름
+
+으로 확인됐습니다.
+
+Tuned model의 CV 평균과 test 성능 차이는 다음과 같았습니다.
+
+- test MAE - CV MAE: `-475.44`
+- test RMSE - CV RMSE: `-10,945.45`
+- test R² - CV R²: `+0.000409`
+
+이는 CV 평균과 고정 test 결과 사이의 참고용 비교이며, 일반화 오차의 정확한 추정치라고 단정하지 않았습니다.
+
+Tuned model의 test 오차(`actual - prediction`)는 다음과 같았습니다.
+
+- 평균: `5,228.04`
+- 중앙값: `-1,328.98`
+- 최소: `-1,112,799.99`
+- 최대: `1,903,003.43`
+- 절대오차 중앙값: `44,290.76`
+- 절대오차 90% quantile: `150,380.38`
+- 음수 prediction: `0개`
+
+이번 test 결과를 확인한 뒤:
+
+- parameter를 다시 변경하지 않았고
+- GridSearch를 추가 실행하지 않았고
+- 2위 후보를 test에 적용하지 않았고
+- 다른 후보를 test 기준으로 비교하지 않았습니다.
+
+따라서 test 결과를 다시 tuning 기준으로 사용하는 과정은 수행하지 않았습니다.
+
+다만 이번 test split은 이전 Dummy·Ridge·RandomForest baseline 평가에서도 이미 사용한 적이 있으므로, 완전히 untouched한 final holdout이라고 표현하지 않습니다.
+
+이번 결과는 train 내부 CV에서 사전에 선택한 tuned RandomForest를 기존 고정 test split에서 재평가한 결과입니다.
+
+종합하면 첫 RandomForest tuning은:
+
+- CV validation MAE 기준 약 `1.50%` 개선
+- 고정 test MAE 기준 약 `0.78%` 개선
+
+을 보였지만,
+
+- 고정 test RMSE는 약 `1.97%` 악화
+- 고정 test R²도 감소
+
+했기 때문에 tuning 효과가 작고 평가 지표에 따라 일관되지 않았다고 판단했습니다.
+
 ## 개발 환경
 
 현재 확인된 환경은 다음과 같습니다.
@@ -2839,5 +2952,6 @@ GridSearch 내부 baseline 후보와 이전에 별도로 실행한 RandomForest 
 - Pipeline 기반 Ridge·RandomForest 5-Fold CV 실행 및 RandomForest의 fold별 validation 성능 우위 확인
 - RandomForest 첫 tuning 대상 3개 parameter와 27개 후보 조합 설계 및 baseline 포함 여부 검증
 - RandomForest 27개 후보를 5-Fold GridSearchCV로 평가하고 MAE 기준 best 조합 및 baseline 대비 약 1.50% 개선 확인
+- GridSearch best RandomForest를 고정 test에서 재평가하고 MAE는 약 0.78% 개선됐지만 RMSE·R²는 악화됨을 확인
 
-아직 GridSearch에서 선택된 RandomForest best estimator의 고정 test split 재평가, 추가 모델 비교 및 EDA 확장은 진행하지 않았습니다. 현재 best parameter는 train 내부 5-Fold validation MAE 기준으로 선택됐으며, 고정 test split은 parameter 선택에 사용하지 않았습니다.
+RandomForest 첫 tuning과 고정 test 재평가까지 완료했습니다. tuning 결과는 validation MAE와 고정 test MAE에서 소폭 개선됐지만 RMSE·R²에서는 일관된 개선이 확인되지 않았습니다. 아직 추가 모델 비교, error/segment 분석 및 EDA 확장은 진행하지 않았으며, test 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
