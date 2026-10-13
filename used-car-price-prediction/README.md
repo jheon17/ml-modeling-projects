@@ -3334,4 +3334,4 @@ Baseline과 tuned model 각각의 squared error 상위 10개 행을 비교했을
 - 고정 test 가격 구간별 error analysis를 통해 100만 이상 차량 7.44%가 tuned squared error의 67.39%를 차지하는 패턴 확인
 - 100만 이상 차량 extreme-error 분석에서 tuned squared-error 증가분 상위 10행이 전체 증가분의 79.89%를 차지하는 집중 패턴 확인
 
-RandomForest 첫 tuning과 고정 test 재평가, 가격 구간별 error analysis, 100만 이상 차량 extreme-error 집중도 분석까지 완료했습니다. 고가 차량에서는 tuned model의 squared error가 103행 중 64행에서 증가했지만, 증가분의 79.89%가 상위 10행에 집중됐습니다. 아직 연식·주행거리 등 추가 segment 분석, 추가 모델 비교 및 최종 프로젝트 요약 정리는 진행하지 않았으며, error analysis 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
+RandomForest 첫 tuning과 고정 test 재평가, 가격 구간별 error analysis, 100만 이상 차량 extreme-error 집중도 분석과 포트폴리오용 최종 프로젝트 요약 정리까지 완료했습니다. 고가 차량에서는 tuned model의 squared error가 103행 중 64행에서 증가했지만, 증가분의 79.89%가 상위 10행에 집중됐습니다. 모델 비교 범위는 이 프로젝트에서 실제 검증한 DummyRegressor, Ridge, RandomForestRegressor로 제한했으며, error analysis 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
