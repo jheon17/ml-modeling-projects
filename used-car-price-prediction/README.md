@@ -1,5 +1,116 @@
 # 중고차 가격 예측
 
+## 프로젝트 요약
+
+중고차의 차량 정보를 이용해 `selling_price`를 예측하는 회귀 프로젝트입니다. 단일 test 성능 비교에 그치지 않고, 각 Cross Validation fold의 training subset에서만 전처리를 학습하는 Pipeline 구조를 적용하고 hyperparameter tuning과 가격 구간별 error analysis까지 수행했습니다.
+
+### Problem
+
+차량 연식, 주행거리, 연료, 변속기, 차량 제원 등의 정보를 바탕으로 중고차 판매가격 `selling_price`를 예측했습니다.
+
+전체 평균 성능뿐 아니라 가격대별 오차와 일부 차량의 큰 예측 오차가 전체 평가 지표에 미치는 영향도 함께 확인했습니다.
+
+### Data
+
+- 출처: Kaggle [`Vehicle dataset from CarDekho`](https://www.kaggle.com/datasets/nehalbirla/vehicle-dataset-from-cardekho)
+- 원본 데이터: `8,128행 × 13열`
+- 완전 중복 제거: `1,202행`
+- 분석 데이터: `6,926행`
+- target: `selling_price`
+- train: `5,541행`
+- test: `1,385행`
+
+### Preprocessing & Validation
+
+- 문자열로 저장된 `mileage`, `engine`, `max_power`, `torque`를 숫자형 차량 제원으로 변환
+- 차량 제원 결측 행은 삭제하지 않고 train 데이터에서 학습한 값으로 대체하고 missing indicator 유지
+- 높은 cardinality의 full `name` 대신 첫 두 단어를 결합한 `name_prefix_2` 사용
+- 범주형 변수 One-Hot Encoding
+- Ridge에 사용하는 수치형 feature에 `StandardScaler` 적용
+- `Pipeline`과 `ColumnTransformer`로 전처리와 모델을 연결
+- train 내부 `5-Fold KFold`에서 각 fold의 training subset에만 전처리를 fit
+- 고정 test split은 tuning parameter 선택에 사용하지 않음
+
+### Model Comparison
+
+모델 비교는 다음 순서로 진행했습니다.
+
+`DummyRegressor → Ridge → RandomForest baseline → RandomForest tuned`
+
+DummyRegressor로 최소 기준선을 설정한 뒤 Ridge와 RandomForest를 동일한 5-Fold 구조에서 비교했습니다.
+
+| Model | Validation MAE | Validation RMSE | Validation R² |
+|---|---:|---:|---:|
+| Ridge | 124,406.47 | 245,443.80 | 0.7805 |
+| RandomForest baseline | 78,457.89 | 164,896.70 | 0.8989 |
+
+RandomForest baseline은 5개 validation fold 모두에서 Ridge보다 낮은 MAE·RMSE와 높은 R²를 기록했습니다.
+
+### Hyperparameter Tuning
+
+RandomForest의 `max_depth`, `min_samples_leaf`, `max_features`로 구성된 `27개` 조합을 5-Fold GridSearchCV로 비교했습니다. Parameter 선택의 1차 기준은 validation MAE였습니다.
+
+선택된 조합은 다음과 같습니다.
+
+- `max_depth=20`
+- `min_samples_leaf=1`
+- `max_features=0.5`
+
+Validation MAE는 `78,457.89 → 77,281.45`로 약 `1.50%` 감소했습니다. 다만 1위와 2위 조합의 MAE 차이가 약 `19.07`에 불과해 특정 조합이 압도적으로 우수하다고 해석하지 않았습니다.
+
+### Fixed Test Evaluation
+
+| Model | Test MAE | Test RMSE | Test R² |
+|---|---:|---:|---:|
+| RandomForest baseline | 77,409.56 | 148,753.08 | 0.905917 |
+| CV MAE 기준 best candidate | 76,806.01 | 151,686.88 | 0.902169 |
+
+CV validation MAE 기준으로 선택한 모델은 고정 test에서 MAE가 약 `0.78%` 개선됐습니다. 반면 RMSE는 약 `1.97%` 악화됐고 R²도 감소해, tuning 효과가 모든 평가 지표에서 일관되게 나타나지는 않았습니다.
+
+### Error Analysis
+
+실제 가격이 `1,000,000 이상`인 차량은 test의 `7.44%`인 `103행`이었지만, tuned model 전체 squared error의 `67.39%`를 차지했습니다.
+
+고가 구간에서는 baseline 대비 squared error가 `64행`에서 증가하고 `39행`에서 감소했습니다. 오차가 악화된 행이 절반을 넘었지만, positive squared-error 증가분의 `79.89%`가 상위 10행에 집중됐으며 고가 구간 squared error의 `72.14%`도 상위 10행에서 발생했습니다.
+
+이는 일부 extreme-error 행에 오차 크기가 집중된 관찰 패턴이며, 특정 차량·브랜드·feature 또는 parameter가 원인이라고 해석하지 않았습니다.
+
+### Conclusion
+
+RandomForest는 train 내부 5-Fold CV에서 Ridge보다 일관되게 낮은 MAE·RMSE와 높은 R²를 기록했습니다.
+
+GridSearch로 선택한 CV MAE 기준 best candidate는 validation MAE와 고정 test MAE를 소폭 낮췄지만, test RMSE와 R²까지 개선하지는 못했습니다.
+
+가격 구간별 분석에서는 전체 지표만으로 파악하기 어려운 고가 차량 extreme-error 집중 패턴을 확인했습니다.
+
+Test 결과를 확인한 뒤 parameter를 다시 선택하거나 다른 후보를 test 기준으로 비교하지 않았습니다.
+
+### Limitations
+
+- 고정 test split은 초기 Dummy·Ridge·RandomForest baseline 비교에 이미 사용되어 완전히 untouched한 final holdout은 아닙니다.
+- GridSearch의 validation MAE 개선 폭은 약 `1.50%`로 작고, 1위와 2위 후보의 차이도 매우 작았습니다.
+- Tuned model은 test MAE만 소폭 개선했으며 RMSE와 R²에서는 일관된 개선을 보이지 않았습니다.
+- 고가 차량의 일부 extreme-error 행이 squared error에 큰 영향을 주었습니다.
+- 모델 비교 범위는 이 프로젝트에서 실제 검증한 `DummyRegressor`, `Ridge`, `RandomForestRegressor`로 제한했습니다.
+
+### Skills & Tech Stack
+
+- Python
+- pandas
+- NumPy
+- scikit-learn
+- Jupyter Notebook
+- Pipeline
+- ColumnTransformer
+- SimpleImputer
+- OneHotEncoder
+- StandardScaler
+- DummyRegressor
+- Ridge
+- RandomForestRegressor
+- KFold
+- GridSearchCV
+
 ## 프로젝트 목적
 
 차량 정보를 이용해 중고차 판매 가격을 예측하는 회귀 모델링 과정을 학습하는 프로젝트입니다.
