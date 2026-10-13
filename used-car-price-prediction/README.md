@@ -75,6 +75,25 @@ Ridge에서는 `log1p` target 적용 후 MAE가 약 `33.02%`, RMSE가 약 `22.70
 
 따라서 이후 모델 비교에서는 `log1p`를 선형 모델의 중요한 후보 target representation으로 유지하되, 모델 family별로 raw/log target을 동일한 CV 조건에서 검증하기로 했습니다.
 
+### Follow-up: Boosting Baseline Comparison
+
+정형 회귀에서 RandomForest 외의 tree ensemble 계열을 비교하기 위해 `HistGradientBoostingRegressor` 기본 설정을 동일한 train 내부 5-Fold CV에서 평가했습니다. 고정 test는 사용하지 않았고, 기존 feature와 preprocessing을 그대로 유지해 model family 차이만 비교했습니다.
+
+| Model | Target | CV MAE | CV RMSE | CV R² |
+|---|---|---:|---:|---:|
+| Ridge | raw | 124,406.47 | 245,443.80 | 0.7805 |
+| Ridge | log1p | 83,323.84 | 189,720.99 | 0.8674 |
+| RandomForest | raw | 78,457.89 | 164,896.70 | 0.8989 |
+| RandomForest | log1p | 78,161.85 | 171,738.88 | 0.8896 |
+| HistGradientBoosting | raw | 80,754.42 | 180,995.70 | 0.8786 |
+| HistGradientBoosting | log1p | 79,078.83 | 183,795.91 | 0.8763 |
+
+HistGradientBoosting에서는 `log1p` 적용 후 MAE가 약 `2.07%` 감소했고 5개 fold 중 4개에서 MAE가 개선됐습니다. 반면 RMSE는 약 `1.55%` 증가하고 R²도 낮아져, target transformation의 효과가 지표별로 일관되지는 않았습니다.
+
+현재 6개 후보 중 MAE는 `RandomForest + log1p`, RMSE와 R²는 `RandomForest + raw target`이 가장 좋았습니다. 기본 설정 HistGradientBoosting은 raw/log1p 모두 현재 RandomForest 후보보다 전반적으로 낮은 CV 성능을 보여, 이번 단계에서는 boosting이 RandomForest를 대체할 근거를 확인하지 못했습니다.
+
+따라서 HistGradientBoosting을 바로 tuning하기보다, 다음 개선 후보는 feature representation을 검증하는 방향으로 두었습니다.
+
 ### Fixed Test Evaluation
 
 | Model | Test MAE | Test RMSE | Test R² |
@@ -3354,3 +3373,5 @@ Baseline과 tuned model 각각의 squared error 상위 10개 행을 비교했을
 RandomForest 첫 tuning과 고정 test 재평가, 가격 구간별 error analysis, 100만 이상 차량 extreme-error 집중도 분석과 포트폴리오용 최종 프로젝트 요약 정리까지 완료했습니다. 고가 차량에서는 tuned model의 squared error가 103행 중 64행에서 증가했지만, 증가분의 79.89%가 상위 10행에 집중됐습니다. 모델 비교 범위는 이 프로젝트에서 실제 검증한 DummyRegressor, Ridge, RandomForestRegressor로 제한했으며, error analysis 결과를 이용한 parameter 재선택은 수행하지 않았습니다.
 
 완료 이후 후속 개선 실험으로 raw target과 `log1p` target을 동일한 train 5-Fold CV에서 비교했으며, Ridge에서는 MAE·RMSE가 5개 fold 모두 개선됐지만 RandomForest에서는 MAE와 RMSE 방향이 엇갈렸습니다. 이 비교에는 고정 test를 사용하지 않았습니다.
+
+추가로 HistGradientBoosting raw/log1p baseline을 동일한 train 5-Fold CV에서 비교했으며, 기본 설정에서는 두 target 모두 RandomForest 후보를 넘지 못했습니다. 이번 비교에도 고정 test는 사용하지 않았고 HistGradientBoosting tuning은 수행하지 않았습니다.
